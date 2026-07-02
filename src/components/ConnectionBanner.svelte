@@ -9,7 +9,7 @@
   let { status, error = null }: Props = $props()
 
   const labels: Record<ConnectionStatus, string> = {
-    connecting: 'Connecting to Home Assistant…',
+    connecting: 'Loading Home Assistant…',
     connected: '',
     reconnecting: 'Reconnecting…',
     error: 'Connection error',

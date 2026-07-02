@@ -13,6 +13,7 @@
   --color-success: #4ade80;
   --color-warning: #fbbf24;
   --color-danger: #f87171;
+  --color-marker-ground: #94a3b8;
 }
 
 html,
@@ -61,4 +62,98 @@ body {
 .chip-off {
   background: color-mix(in srgb, var(--color-text-muted) 15%, transparent);
   color: var(--color-text-muted);
+}
+
+.section-label {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.badge--success {
+  background: color-mix(in srgb, var(--color-success) 20%, transparent);
+  color: var(--color-success);
+}
+
+.badge--warn {
+  background: color-mix(in srgb, var(--color-warning) 22%, transparent);
+  color: var(--color-warning);
+}
+
+.badge--accent {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  color: var(--color-accent);
+}
+
+.badge--muted {
+  background: color-mix(in srgb, var(--color-text-muted) 15%, transparent);
+  color: var(--color-text-muted);
+}
+
+.badge--danger {
+  background: color-mix(in srgb, var(--color-danger) 18%, transparent);
+  color: var(--color-danger);
+}
+
+.flight-live-dot {
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-left: 0.35rem;
+  border-radius: 50%;
+  background: var(--color-success);
+  vertical-align: middle;
+  animation: flight-live-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes flight-live-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.flight-item-fresh {
+  animation: flight-fresh-highlight 2.4s ease-out both;
+}
+
+@keyframes flight-fresh-highlight {
+  0% {
+    background-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flight-live-dot {
+    animation: none;
+    opacity: 0.8;
+  }
+
+  .flight-item-fresh {
+    animation: none;
+  }
 }

@@ -1,0 +1,87 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jdx/mise-action@v2
+        with:
+          version: latest
+
+      - name: Prepare entities config
+        env:
+          ENTITIES_JSON: ${{ secrets.ENTITIES_JSON }}
+        run: |
+          if [ -n "$ENTITIES_JSON" ]; then
+            printf '%s\n' "$ENTITIES_JSON" > src/lib/config/entities.json
+          else
+            cp src/lib/config/entities.example.json src/lib/config/entities.json
+          fi
+
+      - name: Install dependencies
+        run: mise run setup
+
+      - name: Validate entities
+        if: ${{ secrets.HA_TOKEN != '' && secrets.ENTITIES_JSON != '' }}
+        env:
+          HA_URL: ${{ secrets.HA_URL }}
+          HA_TOKEN: ${{ secrets.HA_TOKEN }}
+        run: mise run validate-entities
+
+      - name: Build production bundle
+        env:
+          VITE_HA_URL: ${{ secrets.HA_URL }}
+          VITE_HA_TOKEN: ${{ secrets.HA_TOKEN }}
+        run: mise run build
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+          build-args: |
+            VITE_HA_URL=${{ secrets.HA_URL }}
+            VITE_HA_TOKEN=${{ secrets.HA_TOKEN }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -f k8s/
+          kubectl set image deployment/ha-kiosk ha-kiosk=${{ env.IMAGE }}:${{ github.sha }}
+          kubectl rollout status deployment/ha-kiosk --timeout=120s

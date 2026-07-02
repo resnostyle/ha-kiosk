@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { HassEntity } from 'home-assistant-js-websocket'
-  import { LIGHT_LABELS, type EntityConfig } from '../lib/config/types'
+  import { lightLabel, type EntityConfig } from '../lib/config/types'
   import { toggleLight } from '../lib/ha/services'
   import { isEntityAvailable, isOn } from '../lib/ha/utils'
 
@@ -29,7 +29,7 @@
   </h2>
   <div class="grid grid-cols-2 gap-3">
     {#each lights as { key, entityId, entity }}
-      {@const label = LIGHT_LABELS[key]}
+      {@const label = lightLabel(key)}
       {@const on = isOn(entity)}
       {@const offline = !isEntityAvailable(entity)}
       <button

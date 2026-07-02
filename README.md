@@ -8,6 +8,7 @@ Custom wall tablet and TV display for Home Assistant. Client-only SPA served by 
 |----------|---------|
 | `#/kiosk` | Wall tablet glanceable dashboard |
 | `#/tv` | Living room TV ambient display |
+| `#/master-bedroom` | Master bedroom — Google Home / Nest Hub touch control |
 
 ## Quick start
 
@@ -15,8 +16,9 @@ Requires [mise](https://mise.jdx.dev/).
 
 ```bash
 mise trust
-cp .env.example .env   # set VITE_HA_URL and VITE_HA_TOKEN
-mise run setup
+cp .env.example .env          # set VITE_HA_URL and VITE_HA_TOKEN
+mise run setup                # installs deps + creates entities.json if missing
+# edit src/lib/config/entities.json with your HA entity IDs and display labels
 mise run dev
 ```
 
@@ -26,7 +28,8 @@ Open http://localhost:5173/#/kiosk
 
 | Task | Description |
 |------|-------------|
-| `mise run setup` | Install npm dependencies |
+| `mise run setup` | Install npm dependencies and create local `entities.json` if needed |
+| `mise run prepare-config` | Copy `entities.example.json` → `entities.json` when missing |
 | `mise run dev` | Vite dev server |
 | `mise run build` | Production build to `dist/` |
 | `mise run check` | TypeScript + Svelte checks |
@@ -37,30 +40,53 @@ Open http://localhost:5173/#/kiosk
 
 ## Configuration
 
-Entity IDs live in [`src/lib/config/entities.json`](src/lib/config/entities.json) — components use logical keys, not raw entity IDs.
+### Entity map (local, not committed)
 
-Environment variables (see [`.env.example`](.env.example)):
+Copy [`src/lib/config/entities.example.json`](src/lib/config/entities.example.json) to `entities.json` (or run `mise run setup`). Edit with your entity IDs and display labels:
 
-- `VITE_HA_URL` — HA base URL (e.g. `http://192.168.2.132:8123`)
-- `VITE_HA_TOKEN` — long-lived access token (scoped kiosk user)
+- `labels.people` — names shown on the TV/kiosk people row
+- `labels.lights` — button labels on the kiosk light grid
+- `labels.masterBedroomCovers` — cover alert names on the bedroom display
 
-For Docker/K8s, these are baked in at **build time** via build args.
+`entities.json` is gitignored so your home layout stays private.
+
+### Environment variables
+
+See [`.env.example`](.env.example):
+
+- `VITE_HA_URL` — HA base URL (e.g. `http://homeassistant.local:8123` or your LAN IP)
+- `VITE_HA_TOKEN` — long-lived access token for a **dedicated, limited** kiosk user
+
+`.env` is gitignored. For Docker/K8s, these are baked in at **build time** via build args.
+
+See [SECURITY.md](SECURITY.md) before publishing images or making the repo public.
 
 ## Deploy
 
 ```bash
-export VITE_HA_URL=http://192.168.2.132:8123
+export VITE_HA_URL=http://homeassistant.local:8123
 export VITE_HA_TOKEN=your-token
+export DOCKER_IMAGE=ghcr.io/your-org/ha-kiosk:latest   # optional
 mise run docker-build
 kubectl apply -f k8s/
 ```
 
 Update `k8s/ingress.yaml` with your hostname.
 
+### CI secrets (GitHub Actions)
+
+| Secret | Purpose |
+|--------|---------|
+| `HA_URL` | Home Assistant URL for build + validate |
+| `HA_TOKEN` | Long-lived token (keep repository private or use a limited user) |
+| `ENTITIES_JSON` | Full contents of your `entities.json` for validate/build in CI |
+| `KUBECONFIG` | Cluster credentials for deploy job |
+
 ### Device URLs
 
 - Fully Kiosk: `http://<kiosk-host>/#/kiosk`
 - Android TV: `http://<kiosk-host>/#/tv`
+- Google Home / Nest Hub: `http://<kiosk-host>/#/master-bedroom`
 
 ### HA CORS
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Validates entities.json against the Home Assistant REST API.
+ * Validates src/lib/config/entities.json against the Home Assistant REST API.
+ * Copy entities.example.json to entities.json first (mise run prepare-config).
  * Usage: HA_URL=... HA_TOKEN=... node scripts/validate-entities.mjs
  */
 

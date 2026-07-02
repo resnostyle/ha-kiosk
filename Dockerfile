@@ -3,7 +3,7 @@ FROM node:22-alpine AS build
 
 WORKDIR /app
 
-ARG VITE_HA_URL=http://192.168.2.132:8123
+ARG VITE_HA_URL=http://homeassistant.local:8123
 ARG VITE_HA_TOKEN
 
 ENV VITE_HA_URL=$VITE_HA_URL

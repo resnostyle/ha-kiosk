@@ -29,7 +29,10 @@
     />
   </div>
 
-  <WeatherHero entity={store.entity(entityConfig.weather)} />
+  <WeatherHero
+    entity={store.entity(entityConfig.weather)}
+    weatherEntityId={entityConfig.weather}
+  />
 
   <div class="flex flex-col gap-4">
     <ClockHeader compact />

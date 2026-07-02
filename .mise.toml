@@ -1,0 +1,66 @@
+# https://mise.jdx.dev/
+# First-time: mise trust && mise run setup
+
+[tools]
+node = "22"
+
+[tasks.help]
+description = "Show available automation tasks"
+run = "mise tasks"
+
+[tasks.setup]
+description = "Install dependencies and create local config if missing"
+depends = ["prepare-config"]
+run = "npm install"
+
+[tasks.prepare-config]
+description = "Create entities.json from example when missing"
+run = "node scripts/prepare-config.mjs"
+
+[tasks.dev]
+description = "Start Vite dev server"
+depends = ["setup"]
+run = "npm run dev"
+
+[tasks.build]
+description = "Production build to dist/"
+depends = ["setup"]
+run = "npm run build"
+
+[tasks.preview]
+description = "Preview production build locally"
+depends = ["build"]
+run = "npm run preview"
+
+[tasks.check]
+description = "TypeScript and Svelte checks"
+depends = ["setup"]
+run = "npm run check"
+
+[tasks.validate-entities]
+description = "Validate entities.json against HA API"
+depends = ["setup"]
+run = "npm run validate-entities"
+
+[tasks.docker-build]
+description = "Build nginx container image"
+run = """
+docker build \
+  --build-arg VITE_HA_URL="${VITE_HA_URL:-http://homeassistant.local:8123}" \
+  --build-arg VITE_HA_TOKEN="${VITE_HA_TOKEN:?Set VITE_HA_TOKEN}" \
+  -t "${DOCKER_IMAGE:-ha-kiosk:latest}" .
+"""
+
+[tasks.docker-run]
+description = "Run container locally on port 8080"
+depends = ["docker-build"]
+run = "docker run --rm -p 8080:80 ${DOCKER_IMAGE:-ha-kiosk:latest}"
+
+[tasks.urls]
+description = "Show local URLs"
+run = """
+echo 'Dev:     http://localhost:5173/#/kiosk'
+echo 'TV dev:  http://localhost:5173/#/tv'
+echo 'Bedroom: http://localhost:5173/#/master-bedroom'
+echo 'Docker:  http://localhost:8080/#/kiosk'
+"""

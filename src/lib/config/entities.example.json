@@ -1,0 +1,80 @@
+{
+  "weather": "weather.forecast_home",
+  "people": [
+    "person.adult_one",
+    "person.adult_two"
+  ],
+  "lights": {
+    "deskOne": "light.office_desk",
+    "deskTwo": "light.kids_desk",
+    "livingRoom": "light.living_room",
+    "loft": "light.loft"
+  },
+  "presence": {
+    "downstairs": "binary_sensor.downstairs_occupancy"
+  },
+  "aqaraPresenceZones": [
+    "binary_sensor.fp2_zone_1",
+    "binary_sensor.fp2_zone_2"
+  ],
+  "cameras": {
+    "garage": "camera.garage"
+  },
+  "cameraOccupancy": {
+    "garage": "binary_sensor.garage_occupancy"
+  },
+  "status": {
+    "alarm": "alarm_control_panel.home",
+    "guestMode": "input_boolean.guest_mode"
+  },
+  "masterBedroom": {
+    "light": "light.master_bedroom",
+    "automationWhenOn": "automation.master_bedroom_lights_on",
+    "automationWhenOff": "automation.master_bedroom_lights_off",
+    "doors": [
+      "binary_sensor.bedroom_door",
+      "binary_sensor.front_door"
+    ],
+    "covers": {
+      "garageDoor": "cover.garage_door"
+    }
+  },
+  "flightTracker": {
+    "airportTrack": "text.flightradar24_airport_track",
+    "currentInArea": "sensor.flightradar24_current_in_area",
+    "airportArrivals": "sensor.flightradar24_airport_arrivals",
+    "airportDepartures": "sensor.flightradar24_airport_departures",
+    "arrivalsDelayed": "sensor.flightradar24_airport_arrivals_delayed",
+    "departuresDelayed": "sensor.flightradar24_airport_departures_delayed",
+    "arrivalsDelayAverage": "sensor.flightradar24_airport_arrivals_delay_average",
+    "departuresDelayAverage": "sensor.flightradar24_airport_departures_delay_average",
+    "enteredArea": "sensor.flightradar24_entered_area",
+    "exitedArea": "sensor.flightradar24_exited_area",
+    "mapCenter": {
+      "latitude": 35.8776,
+      "longitude": -78.7874,
+      "zoom": 13,
+      "label": "Airport",
+      "radiusMiles": 8
+    }
+  },
+  "labels": {
+    "people": {
+      "person.adult_one": "Adult One",
+      "person.adult_two": "Adult Two"
+    },
+    "lights": {
+      "deskOne": "Office Desk",
+      "deskTwo": "Kids Desk",
+      "livingRoom": "Living Room",
+      "loft": "Loft"
+    },
+    "masterBedroomCovers": {
+      "garageDoor": "Garage Door"
+    },
+    "aqaraPresence": {
+      "binary_sensor.fp2_zone_1": "Zone 1",
+      "binary_sensor.fp2_zone_2": "Zone 2"
+    }
+  }
+}

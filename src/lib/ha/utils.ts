@@ -12,6 +12,22 @@ export function friendlyName(entity: HassEntity | undefined, fallback: string): 
   return typeof name === 'string' && name.length > 0 ? name : fallback
 }
 
+/** Normalize HA sensor names for consistent kiosk display. */
+export function formatAlertLabel(name: string, kind: 'presence' | 'door'): string {
+  let label = name.trim()
+
+  if (kind === 'door') {
+    label = label.replace(/\s+door$/i, '').replace(/\s+sensor$/i, '')
+  }
+
+  const words = label.split(/\s+/).filter(Boolean)
+  if (words.length === 0) return kind === 'door' ? 'Door' : 'Presence'
+
+  return words
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+}
+
 export function formatTemperature(entity: HassEntity | undefined): string {
   if (!entity || !isEntityAvailable(entity)) return '—'
   const unit = entity.attributes.unit_of_measurement ?? '°'
@@ -26,6 +42,10 @@ export function isOn(entity: HassEntity | undefined): boolean {
   return entity?.state === 'on'
 }
 
+export function isCoverOpen(entity: HassEntity | undefined): boolean {
+  return entity?.state === 'open'
+}
+
 export function weatherCondition(entity: HassEntity | undefined): string {
   if (!entity || !isEntityAvailable(entity)) return 'Unavailable'
   const condition = entity.state
@@ -35,12 +55,15 @@ export function weatherCondition(entity: HassEntity | undefined): string {
 export function forecastDays(entity: HassEntity | undefined, limit = 5) {
   const forecast = entity?.attributes?.forecast
   if (!Array.isArray(forecast)) return []
-  return forecast.slice(0, limit) as Array<{
-    datetime?: string
-    temperature?: number
-    templow?: number
-    condition?: string
-  }>
+  return forecast.slice(0, limit) as WeatherForecastDay[]
+}
+
+export interface WeatherForecastDay {
+  datetime?: string
+  temperature?: number
+  templow?: number
+  condition?: string
+  precipitation_probability?: number
 }
 
 export function haUrl(): string {
