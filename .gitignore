@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+
+# Environment (secrets)
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+
+# mise (local overrides only; .mise.toml is committed)
+.mise.local.toml
+
+# Test / coverage
+coverage/
+
+# Vite
+*.local
+
+# TypeScript
+*.tsbuildinfo
+
+# Docker (local overrides)
+docker-compose.override.yml

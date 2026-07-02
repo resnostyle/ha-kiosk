@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ha-kiosk
+  labels:
+    app: ha-kiosk
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ha-kiosk
+  template:
+    metadata:
+      labels:
+        app: ha-kiosk
+    spec:
+      containers:
+        - name: ha-kiosk
+          image: ghcr.io/resnostyle/ha-kiosk:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+              name: http
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
