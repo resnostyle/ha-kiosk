@@ -78,9 +78,11 @@ Update `k8s/ingress.yaml` with your hostname.
 | Secret | Purpose |
 |--------|---------|
 | `HA_URL` | Home Assistant URL for build + validate |
-| `HA_TOKEN` | Long-lived token (keep repository private or use a limited user) |
+| `HA_TOKEN` | Long-lived token for a **dedicated, limited** kiosk HA user |
 | `ENTITIES_JSON` | Full contents of your `entities.json` for validate/build in CI |
-| `KUBECONFIG` | Cluster credentials for deploy job |
+| `KUBECONFIG` | Cluster credentials for deploy job (optional — deploy is skipped if unset) |
+
+All four are optional for CI to pass: without them, the workflow builds with placeholder credentials and the example entity map. Set all four on your fork/main repo for production deploys. If `HA_TOKEN` is set, keep the GHCR package **private** (see [SECURITY.md](SECURITY.md)).
 
 ### Device URLs
 

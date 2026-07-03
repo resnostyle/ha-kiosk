@@ -8,6 +8,8 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE: ghcr.io/${{ github.repository }}
+  # Placeholder baked into CI builds when secrets are not configured (safe to publish).
+  CI_PLACEHOLDER_TOKEN: ci-placeholder-not-a-real-token
 
 jobs:
   build:
@@ -31,22 +33,47 @@ jobs:
             printf '%s\n' "$ENTITIES_JSON" > src/lib/config/entities.json
           else
             cp src/lib/config/entities.example.json src/lib/config/entities.json
+            echo "Using entities.example.json (set ENTITIES_JSON secret for your real entity map)"
           fi
 
       - name: Install dependencies
         run: mise run setup
 
+      # GitHub Actions does not allow the secrets context in job/step if: expressions.
+      # Gate optional steps in shell instead.
       - name: Validate entities
-        if: ${{ secrets.HA_TOKEN != '' && secrets.ENTITIES_JSON != '' }}
         env:
           HA_URL: ${{ secrets.HA_URL }}
           HA_TOKEN: ${{ secrets.HA_TOKEN }}
-        run: mise run validate-entities
+          ENTITIES_JSON: ${{ secrets.ENTITIES_JSON }}
+        run: |
+          if [ -z "$HA_URL" ] || [ -z "$HA_TOKEN" ] || [ -z "$ENTITIES_JSON" ]; then
+            echo "Skipping entity validation — set HA_URL, HA_TOKEN, and ENTITIES_JSON secrets to enable."
+            exit 0
+          fi
+          mise run validate-entities
+
+      - name: Resolve build credentials
+        id: creds
+        env:
+          HA_URL: ${{ secrets.HA_URL }}
+          HA_TOKEN: ${{ secrets.HA_TOKEN }}
+        run: |
+          if [ -n "$HA_TOKEN" ]; then
+            echo "vite_ha_url=${HA_URL:-http://homeassistant.local:8123}" >> "$GITHUB_OUTPUT"
+            echo "vite_ha_token=$HA_TOKEN" >> "$GITHUB_OUTPUT"
+            echo "has_real_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "vite_ha_url=${HA_URL:-http://homeassistant.local:8123}" >> "$GITHUB_OUTPUT"
+            echo "vite_ha_token=${CI_PLACEHOLDER_TOKEN}" >> "$GITHUB_OUTPUT"
+            echo "has_real_token=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::HA_TOKEN secret not set — building with a placeholder token (OK for public CI; do not use this image against a real HA instance)"
+          fi
 
       - name: Build production bundle
         env:
-          VITE_HA_URL: ${{ secrets.HA_URL }}
-          VITE_HA_TOKEN: ${{ secrets.HA_TOKEN }}
+          VITE_HA_URL: ${{ steps.creds.outputs.vite_ha_url }}
+          VITE_HA_TOKEN: ${{ steps.creds.outputs.vite_ha_token }}
         run: mise run build
 
       - name: Log in to GHCR
@@ -65,23 +92,29 @@ jobs:
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:${{ github.sha }}
           build-args: |
-            VITE_HA_URL=${{ secrets.HA_URL }}
-            VITE_HA_TOKEN=${{ secrets.HA_TOKEN }}
+            VITE_HA_URL=${{ steps.creds.outputs.vite_ha_url }}
+            VITE_HA_TOKEN=${{ steps.creds.outputs.vite_ha_token }}
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.event.repository.fork == false
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
-
       - name: Deploy to Kubernetes
+        env:
+          KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG }}
+          IMAGE: ${{ env.IMAGE }}
+          SHA: ${{ github.sha }}
         run: |
+          if [ -z "$KUBECONFIG_CONTENT" ]; then
+            echo "Skipping deploy — KUBECONFIG secret not configured."
+            exit 0
+          fi
+          mkdir -p ~/.kube
+          printf '%s\n' "$KUBECONFIG_CONTENT" > ~/.kube/config
+          chmod 600 ~/.kube/config
           kubectl apply -f k8s/
-          kubectl set image deployment/ha-kiosk ha-kiosk=${{ env.IMAGE }}:${{ github.sha }}
+          kubectl set image deployment/ha-kiosk ha-kiosk="${IMAGE}:${SHA}"
           kubectl rollout status deployment/ha-kiosk --timeout=120s
