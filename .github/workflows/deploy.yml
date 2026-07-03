@@ -2,7 +2,7 @@ name: Build and Deploy
 
 on:
   push:
-    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 env:
@@ -21,9 +21,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@v4
         with:
-          version: latest
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare entities config
         env:
@@ -38,6 +38,9 @@ jobs:
 
       - name: Install dependencies
         run: mise run setup
+
+      - name: Typecheck
+        run: mise run check
 
       # GitHub Actions does not allow the secrets context in job/step if: expressions.
       # Gate optional steps in shell instead.
@@ -77,6 +80,7 @@ jobs:
         run: mise run build
 
       - name: Log in to GHCR
+        if: github.ref == 'refs/heads/main' && github.event.repository.fork == false
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -84,6 +88,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
+        if: github.ref == 'refs/heads/main' && github.event.repository.fork == false
         uses: docker/build-push-action@v6
         with:
           context: .
