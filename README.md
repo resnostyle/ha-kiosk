@@ -9,6 +9,7 @@ Custom wall tablet and TV display for Home Assistant. Client-only SPA served by 
 | `#/kiosk` | Wall tablet glanceable dashboard |
 | `#/tv` | Living room TV ambient display |
 | `#/master-bedroom` | Master bedroom — Google Home / Nest Hub touch control |
+| `#/evening` | Evening wind-down board for Nest Hub (9–10 PM) |
 
 ## Quick start
 
@@ -88,7 +89,7 @@ All four are optional for CI to pass: without them, the workflow builds with pla
 
 - Fully Kiosk: `http://<kiosk-host>/#/kiosk`
 - Android TV: `http://<kiosk-host>/#/tv`
-- Google Home / Nest Hub: `http://<kiosk-host>/#/master-bedroom`
+- Google Home / Nest Hub: `http://<kiosk-host>/#/master-bedroom` or `/#/evening`
 
 ### HA CORS
 

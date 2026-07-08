@@ -1,4 +1,4 @@
-export type DashboardRoute = 'kiosk' | 'tv' | 'master-bedroom' | 'flights'
+export type DashboardRoute = 'kiosk' | 'tv' | 'master-bedroom' | 'flights' | 'evening'
 
 export interface Dashboard {
   id: DashboardRoute
@@ -11,6 +11,7 @@ export const DASHBOARDS: Dashboard[] = [
   { id: 'kiosk', hash: '#/kiosk', label: 'Kiosk', hint: 'Wall tablet' },
   { id: 'tv', hash: '#/tv', label: 'TV', hint: 'Living room' },
   { id: 'master-bedroom', hash: '#/master-bedroom', label: 'Bedroom', hint: 'Nest Hub' },
+  { id: 'evening', hash: '#/evening', label: 'Evening', hint: 'Nest Hub night' },
   { id: 'flights', hash: '#/flights', label: 'Flights', hint: 'FlightRadar24' },
 ]
 
@@ -18,6 +19,7 @@ export function parseDashboardRoute(hash: string): DashboardRoute {
   const path = hash.replace(/^#\/?/, '').split('?')[0]
   if (path === 'tv') return 'tv'
   if (path === 'master-bedroom' || path === 'bedroom') return 'master-bedroom'
+  if (path === 'evening' || path === 'night') return 'evening'
   if (path === 'flights' || path === 'flight') return 'flights'
   return 'kiosk'
 }

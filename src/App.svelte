@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import DashboardNav from './components/DashboardNav.svelte'
+  import EveningPage from './routes/EveningPage.svelte'
   import FlightPage from './routes/FlightPage.svelte'
   import KioskPage from './routes/KioskPage.svelte'
   import MasterBedroomPage from './routes/MasterBedroomPage.svelte'
@@ -29,6 +30,8 @@
     <MasterBedroomPage />
   {:else if route === 'flights'}
     <FlightPage />
+  {:else if route === 'evening'}
+    <EveningPage />
   {:else}
     <KioskPage />
   {/if}

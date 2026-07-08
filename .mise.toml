@@ -62,5 +62,6 @@ run = """
 echo 'Dev:     http://localhost:5173/#/kiosk'
 echo 'TV dev:  http://localhost:5173/#/tv'
 echo 'Bedroom: http://localhost:5173/#/master-bedroom'
+echo 'Evening: http://localhost:5173/#/evening'
 echo 'Docker:  http://localhost:8080/#/kiosk'
 """

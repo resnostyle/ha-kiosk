@@ -39,6 +39,47 @@
       "garageDoor": "cover.garage_door"
     }
   },
+  "evening": {
+    "chores": {
+      "kaylen": [
+        "sensor.kaylen_choreops_chore_status_dosage",
+        "sensor.kaylen_choreops_chore_status_dishes_unload",
+        "sensor.kaylen_choreops_chore_status_take_out_trash"
+      ],
+      "maya": [
+        "sensor.maya_choreops_chore_status_brush_teeth",
+        "sensor.maya_choreops_chore_status_load_dishwasher",
+        "sensor.maya_choreops_chore_status_start_dishwash"
+      ]
+    },
+    "points": {
+      "kaylen": "sensor.kaylen_choreops_points",
+      "maya": "sensor.maya_choreops_points"
+    },
+    "tomorrow": {
+      "workdayCalendar": "calendar.workday_sensor_calendar",
+      "personalCalendar": "calendar.personal_2",
+      "sunrise": "sensor.sun_next_rising"
+    },
+    "security": {
+      "doors": [
+        "binary_sensor.front_door_sensor_door",
+        "binary_sensor.garage_inside_door_door"
+      ],
+      "covers": {
+        "garage": "cover.ratgdov25i_e5a212_door"
+      },
+      "locks": {
+        "garage": "lock.ratgdov25i_e5a212_lock_remotes"
+      },
+      "alarm": "alarm_control_panel.alarmo",
+      "downstairsOccupancy": "binary_sensor.downstairs_occupancy"
+    },
+    "todos": {
+      "groceries": "todo.groceries_2",
+      "costco": "todo.costco_2"
+    }
+  },
   "flightTracker": {
     "airportTrack": "text.flightradar24_airport_track",
     "currentInArea": "sensor.flightradar24_current_in_area",
@@ -72,6 +113,14 @@
     "masterBedroomCovers": {
       "garageDoor": "Garage Door"
     },
+    "eveningCovers": {
+      "garage": "Garage Door"
+    },
+    "eveningKids": {
+      "kaylen": "Kaylen",
+      "maya": "Maya"
+    },
+    "eveningChores": {},
     "aqaraPresence": {
       "binary_sensor.fp2_zone_1": "Zone 1",
       "binary_sensor.fp2_zone_2": "Zone 2"

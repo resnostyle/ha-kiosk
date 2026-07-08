@@ -6,7 +6,32 @@ export interface EntityLabels {
   people: Record<string, string>
   lights: Record<string, string>
   masterBedroomCovers: Record<string, string>
+  eveningCovers?: Record<string, string>
+  eveningChores?: Record<string, string>
+  eveningKids?: Record<string, string>
   aqaraPresence?: Record<string, string>
+}
+
+export interface EveningTomorrowConfig {
+  workdayCalendar: string
+  personalCalendar: string
+  sunrise: string
+}
+
+export interface EveningSecurityConfig {
+  doors: string[]
+  covers: Record<string, string>
+  locks?: Record<string, string>
+  alarm: string
+  downstairsOccupancy?: string
+}
+
+export interface EveningConfig {
+  chores: Record<string, string[]>
+  points?: Record<string, string>
+  tomorrow: EveningTomorrowConfig
+  security: EveningSecurityConfig
+  todos?: Record<string, string>
 }
 
 export interface MasterBedroomConfig {
@@ -50,6 +75,7 @@ export interface EntityConfig {
   cameraOccupancy: Record<string, string>
   status: Record<string, string>
   masterBedroom: MasterBedroomConfig
+  evening: EveningConfig
   flightTracker: FlightTrackerConfig
   labels: EntityLabels
 }
@@ -72,6 +98,19 @@ export function allEntityIds(config: EntityConfig = entityConfig): string[] {
     config.masterBedroom.automationWhenOff,
     ...config.masterBedroom.doors,
     ...Object.values(config.masterBedroom.covers),
+    ...Object.values(config.evening.chores).flat(),
+    ...Object.values(config.evening.points ?? {}),
+    config.evening.tomorrow.workdayCalendar,
+    config.evening.tomorrow.personalCalendar,
+    config.evening.tomorrow.sunrise,
+    ...config.evening.security.doors,
+    ...Object.values(config.evening.security.covers),
+    ...Object.values(config.evening.security.locks ?? {}),
+    config.evening.security.alarm,
+    ...(config.evening.security.downstairsOccupancy
+      ? [config.evening.security.downstairsOccupancy]
+      : []),
+    ...Object.values(config.evening.todos ?? {}),
     config.flightTracker.airportTrack,
     config.flightTracker.currentInArea,
     config.flightTracker.airportArrivals,
@@ -121,4 +160,27 @@ export function aqaraPresenceLabel(
   const configured = entityConfig.labels.aqaraPresence?.[entityId]
   if (configured) return configured
   return formatAlertLabel(friendlyName(entity, 'Zone'), 'presence')
+}
+
+export function eveningKidLabel(kidKey: string): string {
+  return entityConfig.labels.eveningKids?.[kidKey] ?? kidKey
+}
+
+export function eveningChoreLabel(entityId: string, entity?: HassEntity): string {
+  const configured = entityConfig.labels.eveningChores?.[entityId]
+  if (configured) return configured
+  const choreName = entity?.attributes?.chore_name
+  if (typeof choreName === 'string' && choreName.length > 0) return choreName
+  const suffix = entityId.split('_chore_status_')[1]
+  if (suffix) {
+    return suffix
+      .split('_')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  }
+  return friendlyName(entity, 'Chore')
+}
+
+export function eveningCoverLabel(key: string): string {
+  return entityConfig.labels.eveningCovers?.[key] ?? key
 }
