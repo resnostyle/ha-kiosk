@@ -21,9 +21,20 @@ export async function toggleLight(entityId: string): Promise<void> {
   await callService(conn, 'light', 'toggle', { entity_id: entityId })
 }
 
+export async function setLightBrightness(entityId: string, brightness: number): Promise<void> {
+  const conn = await getConnection()
+  const level = Math.max(1, Math.min(255, Math.round(brightness)))
+  await callService(conn, 'light', 'turn_on', { entity_id: entityId, brightness: level })
+}
+
 export async function turnOnScene(entityId: string): Promise<void> {
   const conn = await getConnection()
   await callService(conn, 'scene', 'turn_on', { entity_id: entityId })
+}
+
+export async function turnOffLights(entityIds: string[]): Promise<void> {
+  const conn = await getConnection()
+  await callService(conn, 'light', 'turn_off', { entity_id: entityIds })
 }
 
 export async function triggerAutomation(entityId: string): Promise<void> {

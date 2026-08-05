@@ -5,6 +5,7 @@
   import FlightPage from './routes/FlightPage.svelte'
   import KioskPage from './routes/KioskPage.svelte'
   import MasterBedroomPage from './routes/MasterBedroomPage.svelte'
+  import PlayroomPage from './routes/PlayroomPage.svelte'
   import TVPage from './routes/TVPage.svelte'
   import { parseDashboardRoute, type DashboardRoute } from './lib/routes'
 
@@ -28,6 +29,8 @@
     <TVPage />
   {:else if route === 'master-bedroom'}
     <MasterBedroomPage />
+  {:else if route === 'playroom'}
+    <PlayroomPage />
   {:else if route === 'flights'}
     <FlightPage />
   {:else if route === 'evening'}

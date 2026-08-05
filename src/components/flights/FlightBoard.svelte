@@ -4,14 +4,14 @@
   import type { BoardAirlineCount, BoardFlight, BoardKind } from '../../lib/flights/types'
   import {
     airlineLogoUrl,
-    boardActualTime,
     boardDelayInfo,
-    boardScheduledTime,
-    boardStatusDisplay,
+    boardStatusShort,
+    boardTimeDisplay,
     flightStatToneToBadgeClass,
+    isActiveBoardFlight,
     statusClass,
   } from '../../lib/flights/utils'
-  import AirlineMark from './AirlineMark.svelte'
+  import AircraftThumb from './AircraftThumb.svelte'
   import AnimatedFlightValue from './AnimatedFlightValue.svelte'
 
   interface Props {
@@ -35,9 +35,7 @@
   }: Props = $props()
 
   const headerCount = $derived(totalFlights ?? flights.length)
-  const showingSubset = $derived(headerCount > flights.length)
   const routeHeading = $derived(kind === 'arrival' ? 'From' : 'To')
-  const estHeading = $derived(kind === 'arrival' ? 'Est arr' : 'Est dep')
 
   function airlineCode(row: BoardAirlineCount): string {
     if (row.airlineIata) return row.airlineIata
@@ -45,60 +43,44 @@
     return word.slice(0, 3).toUpperCase()
   }
 
-  function aircraftSuffix(flight: BoardFlight): string {
-    return flight.aircraftModel ? ` · ${flight.aircraftModel}` : ''
+  function airlineLabel(flight: BoardFlight): string {
+    return flight.airlineIata ?? flight.airline.split(/\s+/)[0]?.slice(0, 3).toUpperCase() ?? '—'
   }
 </script>
 
 <section class="flight-board panel">
   <header class="flight-board-header">
-    <div class="flight-board-header-main">
-      <h2 class="section-label">{title}</h2>
+    <h2 class="flight-board-title">
+      {title}
       {#if headerCount > 0}
-        <p class="flight-board-subtitle">
-          {headerCount} flight{headerCount === 1 ? '' : 's'}
-          {#if showingSubset}
-            <span class="flight-board-subtitle-note">· showing {flights.length}</span>
-          {/if}
-        </p>
+        <span class="flight-board-count">{headerCount}</span>
       {/if}
-    </div>
-    {#if headerCount > 0}
-      <span class="flight-board-total" aria-hidden="true">
-        <AnimatedFlightValue value={headerCount} />
-      </span>
-    {/if}
+    </h2>
   </header>
 
   {#if airlineCounts.length > 0}
-    <div class="flight-board-breakdown">
-      <h3 class="flight-board-breakdown-label">Airlines</h3>
-      <ul class="flight-board-breakdown-grid">
-        {#each airlineCounts as row (row.key)}
-          {@const code = airlineCode(row)}
-          {@const logo = airlineLogoUrl(row.airlineIata)}
-          <li
-            class="flight-board-breakdown-item"
-            title="{row.airline} · {row.count}"
-            animate:flip={{ duration: 300 }}
-            in:fly={{ y: 8, duration: 200 }}
-            out:fade={{ duration: 140 }}
-          >
-            <span class="flight-board-breakdown-logo" aria-hidden="true">
-              {#if logo}
-                <img src={logo} alt="" loading="lazy" />
-              {:else}
-                <span class="flight-board-breakdown-fallback">{code}</span>
-              {/if}
-            </span>
-            <span class="flight-board-breakdown-code">{code}</span>
-            <span class="flight-board-breakdown-count">
-              <AnimatedFlightValue value={row.count} />
-            </span>
-          </li>
-        {/each}
-      </ul>
-    </div>
+    <ul class="flight-board-airlines" aria-label="Airlines">
+      {#each airlineCounts as row (row.key)}
+        {@const code = airlineCode(row)}
+        {@const logo = airlineLogoUrl(row.airlineIata)}
+        <li
+          class="flight-board-airline"
+          title="{row.airline} · {row.count}"
+          animate:flip={{ duration: 300 }}
+          in:fly={{ y: 6, duration: 180 }}
+          out:fade={{ duration: 120 }}
+        >
+          {#if logo}
+            <img class="flight-board-airline-logo" src={logo} alt="" loading="lazy" />
+          {:else}
+            <span class="flight-board-airline-fallback">{code}</span>
+          {/if}
+          <span class="flight-board-airline-count">
+            <AnimatedFlightValue value={row.count} />
+          </span>
+        </li>
+      {/each}
+    </ul>
   {/if}
 
   {#if flights.length === 0}
@@ -106,59 +88,53 @@
   {:else}
     <div class="flight-board-table" role="table" aria-label="{title}">
       <div class="flight-board-columns" role="row">
+        <span class="flight-board-col flight-board-col-thumb" role="columnheader" aria-hidden="true"></span>
         <span class="flight-board-col flight-board-col-flight" role="columnheader">Flight</span>
         <span class="flight-board-col flight-board-col-route" role="columnheader">{routeHeading}</span>
-        <span class="flight-board-col flight-board-col-sched" role="columnheader">Sched</span>
-        <span class="flight-board-col flight-board-col-est" role="columnheader">{estHeading}</span>
+        <span class="flight-board-col flight-board-col-time" role="columnheader">Time</span>
         <span class="flight-board-col flight-board-col-status" role="columnheader">Status</span>
       </div>
 
       <ul class="flight-board-list">
         {#each flights as flight (flight.id)}
-          {@const scheduled = boardScheduledTime(flight, kind)}
-          {@const estimated = boardActualTime(flight, kind)}
           {@const delay = boardDelayInfo(flight, kind)}
+          {@const statusShort = boardStatusShort(flight, kind)}
+          {@const active = isActiveBoardFlight(flight, kind)}
           <li
             class="flight-board-row"
+            class:flight-board-row--active={active}
             class:flight-item-fresh={isFresh(flight.id)}
+            data-kind={kind}
             role="row"
             animate:flip={{ duration: 280 }}
-            in:fly={{ x: -10, duration: 220 }}
-            out:fade={{ duration: 150 }}
+            in:fly={{ x: -8, duration: 200 }}
+            out:fade={{ duration: 140 }}
           >
-            <div class="flight-board-main flight-board-col-flight" role="cell">
+            <div class="flight-board-col-thumb" role="cell">
+              {#if active}
+                <AircraftThumb src={flight.photoUrl} label={flight.flightNumber} size="sm" />
+              {/if}
+            </div>
+
+            <div class="flight-board-col-flight" role="cell">
               <span class="flight-board-flight">{flight.flightNumber}</span>
-              <AirlineMark
-                name={flight.airline}
-                iata={flight.airlineIata}
-                suffix={aircraftSuffix(flight)}
-              />
+              <span class="flight-board-carrier">{airlineLabel(flight)}</span>
             </div>
 
-            <div class="flight-board-route flight-board-col-route" role="cell">
+            <div class="flight-board-col-route" role="cell">
               <span class="flight-board-airport">{flight.airportCode}</span>
-              <span class="flight-board-city">{flight.airport}</span>
             </div>
 
-            <span class="flight-board-time flight-board-col-sched" role="cell">
-              {scheduled ?? '—'}
+            <span class="flight-board-col-time" role="cell">
+              {boardTimeDisplay(flight, kind)}
             </span>
 
-            <span
-              class="flight-board-time flight-board-col-est"
-              class:flight-board-time-estimated={estimated != null}
-              role="cell"
-            >
-              {estimated ?? '—'}
-            </span>
-
-            <div class="flight-board-status-cell flight-board-col-status" role="cell">
+            <div class="flight-board-col-status" role="cell">
               {#if delay}
                 <span class={flightStatToneToBadgeClass(delay.tone)}>{delay.label}</span>
+              {:else if statusShort}
+                <span class="flight-board-status {statusClass(flight.status)}">{statusShort}</span>
               {/if}
-              <span class="flight-board-status {statusClass(flight.status)}">
-                {boardStatusDisplay(flight, kind)}
-              </span>
             </div>
           </li>
         {/each}
@@ -172,133 +148,89 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
-    padding: 0.75rem;
+    padding: 0.35rem 0.4rem 0.4rem;
     height: 100%;
-    gap: 0.65rem;
+    gap: 0.25rem;
   }
 
   .flight-board-header {
+    flex-shrink: 0;
+    padding: 0 0.05rem;
+  }
+
+  .flight-board-title {
+    margin: 0;
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.75rem;
-    flex-shrink: 0;
-  }
-
-  .flight-board-header-main {
-    min-width: 0;
-  }
-
-  .flight-board-subtitle {
-    margin: 0.2rem 0 0;
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    line-height: 1.3;
-  }
-
-  .flight-board-subtitle-note {
-    color: color-mix(in srgb, var(--color-text-muted) 85%, var(--color-text));
-  }
-
-  .flight-board-total {
-    font-size: 1.5rem;
-    font-weight: 700;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-    color: color-mix(in srgb, var(--color-text-muted) 55%, var(--color-text));
-    flex-shrink: 0;
-  }
-
-  .flight-board-breakdown {
-    flex-shrink: 0;
-    padding: 0.6rem 0.65rem;
-    border-radius: 0.65rem;
-    background: var(--color-surface-overlay);
-    border: 1px solid color-mix(in srgb, var(--color-border) 75%, transparent);
-  }
-
-  .flight-board-breakdown-label {
-    margin: 0 0 0.5rem;
-    font-size: 0.625rem;
+    align-items: baseline;
+    gap: 0.35rem;
+    font-size: 0.6875rem;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--color-text-muted);
   }
 
-  .flight-board-breakdown-grid {
+  .flight-board-count {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .flight-board-airlines {
     list-style: none;
     margin: 0;
-    padding: 0;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(3.5rem, 1fr));
-    gap: 0.35rem;
-  }
-
-  .flight-board-breakdown-item {
+    padding: 0 0 0.2rem;
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.2rem;
-    padding: 0.45rem 0.25rem 0.4rem;
-    border-radius: 0.5rem;
-    min-width: 0;
-    text-align: center;
-  }
-
-  .flight-board-breakdown-logo {
-    display: grid;
-    place-items: center;
-    width: 1.5rem;
-    height: 1.5rem;
+    flex-wrap: wrap;
+    gap: 0.22rem;
     flex-shrink: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 65%, transparent);
   }
 
-  .flight-board-breakdown-logo img {
-    width: 100%;
-    height: 100%;
+  .flight-board-airline {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+    padding: 0.18rem 0.38rem 0.18rem 0.28rem;
+    border-radius: 9999px;
+    background: var(--color-surface-overlay);
+    border: 1px solid color-mix(in srgb, var(--color-border) 65%, transparent);
+  }
+
+  .flight-board-airline-logo {
+    width: 1.25rem;
+    height: 1.25rem;
     object-fit: contain;
     border-radius: 0.2rem;
     background: #fff;
     padding: 0.1rem;
   }
 
-  .flight-board-breakdown-fallback {
+  .flight-board-airline-fallback {
     display: grid;
     place-items: center;
-    width: 1.5rem;
-    height: 1.5rem;
-    border-radius: 0.25rem;
-    font-size: 0.5625rem;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 0.2rem;
+    font-size: 0.5rem;
     font-weight: 700;
-    letter-spacing: 0.02em;
     background: color-mix(in srgb, var(--color-border) 60%, transparent);
     color: var(--color-text-muted);
   }
 
-  .flight-board-breakdown-code {
-    font-size: 0.625rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    color: var(--color-text-muted);
-    line-height: 1;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .flight-board-breakdown-count {
-    font-size: 0.9375rem;
+  .flight-board-airline-count {
+    font-size: 0.6875rem;
     font-weight: 700;
-    line-height: 1;
     font-variant-numeric: tabular-nums;
     color: var(--color-text);
+    line-height: 1;
   }
 
   .flight-board-empty {
     margin: auto;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     color: var(--color-text-muted);
     text-align: center;
   }
@@ -308,24 +240,42 @@
     flex-direction: column;
     min-height: 0;
     flex: 1;
-    border-top: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
   }
 
   .flight-board-columns,
   .flight-board-row {
     display: grid;
-    grid-template-columns: minmax(5.5rem, 1.35fr) minmax(3.5rem, 1fr) 3.25rem 3.25rem minmax(4.5rem, auto);
-    gap: 0.4rem 0.5rem;
+    grid-template-columns: 1.75rem minmax(4.5rem, 1.2fr) 2.25rem minmax(4.5rem, 1fr) minmax(3.25rem, auto);
+    gap: 0.25rem 0.35rem;
     align-items: center;
   }
 
+  .flight-board-row--active {
+    border-radius: 0.35rem;
+    border-left: 2px solid transparent;
+  }
+
+  .flight-board-row--active[data-kind='arrival'] {
+    border-left-color: var(--color-success);
+    background: color-mix(in srgb, var(--color-success) 8%, transparent);
+  }
+
+  .flight-board-row--active[data-kind='departure'] {
+    border-left-color: var(--color-warning);
+    background: color-mix(in srgb, var(--color-warning) 8%, transparent);
+  }
+
+  .flight-board-col-thumb {
+    width: 1.75rem;
+  }
+
   .flight-board-columns {
-    padding: 0.45rem 0.45rem 0.35rem;
+    padding: 0.1rem 0.15rem 0.08rem;
     flex-shrink: 0;
   }
 
   .flight-board-col {
-    font-size: 0.5625rem;
+    font-size: 0.5rem;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -347,76 +297,63 @@
   }
 
   .flight-board-row {
-    padding: 0.65rem 0.45rem;
-    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
-    border-radius: 0.45rem;
+    padding: 0.22rem 0.15rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 45%, transparent);
   }
 
   .flight-board-row:last-child {
     border-bottom: none;
   }
 
-  .flight-board-main {
+  .flight-board-col-flight {
     display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
+    align-items: baseline;
+    gap: 0.3rem;
     min-width: 0;
   }
 
   .flight-board-flight {
     font-weight: 700;
-    font-size: 0.875rem;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
   }
 
-  .flight-board-main :global(.airline-mark) {
-    margin: 0;
-    font-size: 0.6875rem;
-  }
-
-  .flight-board-route {
-    display: flex;
-    flex-direction: column;
-    gap: 0.1rem;
-    min-width: 0;
-  }
-
-  .flight-board-airport {
-    font-weight: 600;
-    font-size: 0.8125rem;
-  }
-
-  .flight-board-city {
-    font-size: 0.6875rem;
+  .flight-board-carrier {
+    font-size: 0.5625rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
     color: var(--color-text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .flight-board-time {
-    font-size: 0.75rem;
+  .flight-board-airport {
+    font-weight: 600;
+    font-size: 0.6875rem;
+    letter-spacing: 0.02em;
+  }
+
+  .flight-board-col-time {
+    font-size: 0.6875rem;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    color: var(--color-text);
   }
 
-  .flight-board-time-estimated {
-    color: var(--color-accent);
-  }
-
-  .flight-board-status-cell {
+  .flight-board-col-status {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 0.2rem;
+    justify-content: flex-end;
     min-width: 0;
   }
 
   .flight-board-status {
-    text-align: right;
-    font-size: 0.6875rem;
-    font-weight: 600;
-    line-height: 1.2;
+    font-size: 0.5625rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
   }
 
   .flight-board .flight-status-delayed {
@@ -435,19 +372,8 @@
     color: var(--color-success);
   }
 
-  .flight-board .flight-status-default {
-    color: var(--color-text);
-  }
-
-  @media (max-width: 900px) {
-    .flight-board-columns,
-    .flight-board-row {
-      grid-template-columns: minmax(4.5rem, 1.2fr) minmax(2.5rem, 0.9fr) 2.75rem 2.75rem minmax(3.5rem, auto);
-      gap: 0.35rem;
-    }
-
-    .flight-board-time {
-      font-size: 0.6875rem;
-    }
+  .flight-board :global(.badge) {
+    font-size: 0.5625rem;
+    padding: 0.1rem 0.35rem;
   }
 </style>

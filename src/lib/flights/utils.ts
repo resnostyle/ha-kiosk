@@ -21,6 +21,69 @@ export function sanitizePhotoUrl(value: unknown): string | null {
   return raw.replace(/^https:+(https?:\/\/)/, '$1')
 }
 
+/** FR24 aircraft-type sideview when no registration photo is available. */
+export function aircraftTypePhotoUrl(aircraftCode: string | null | undefined): string | null {
+  const code = aircraftCode?.trim().toUpperCase()
+  if (!code || !/^[A-Z0-9]{2,4}$/.test(code)) return null
+  return `https://www.flightradar24.com/static/images/sideviews/thumbnails/${code}.jpg`
+}
+
+function boardFlightPhotoFromRow(row: Record<string, unknown>): string | null {
+  return (
+    sanitizePhotoUrl(row.aircraft_photo_medium) ??
+    sanitizePhotoUrl(row.aircraft_photo_small) ??
+    sanitizePhotoUrl(row.aircraft_photo_large) ??
+    aircraftTypePhotoUrl(asString(row.aircraft_code))
+  )
+}
+
+function flightLookupKey(flightNumber: string | null | undefined, callsign?: string | null): string {
+  const raw = flightNumber ?? callsign ?? ''
+  return raw.replace(/\s/g, '').toUpperCase()
+}
+
+/** Prefer live overhead photos (often JetPhotos) over type silhouettes. */
+export function enrichBoardFlightsFromOverhead(
+  boardFlights: BoardFlight[],
+  overheadFlights: OverheadFlight[],
+): BoardFlight[] {
+  if (overheadFlights.length === 0) return boardFlights
+
+  const photos = new Map<string, string>()
+  for (const flight of overheadFlights) {
+    if (!flight.photoUrl) continue
+    const keys = [flightLookupKey(flight.flightNumber), flightLookupKey(flight.callsign)].filter(
+      Boolean,
+    )
+    for (const key of keys) {
+      photos.set(key, flight.photoUrl)
+    }
+  }
+
+  return boardFlights.map((flight) => {
+    const key = flightLookupKey(flight.flightNumber)
+    const photoUrl = photos.get(key) ?? flight.photoUrl
+    return photoUrl === flight.photoUrl ? flight : { ...flight, photoUrl }
+  })
+}
+
+/** Flights actively arriving or departing soon — estimated, delayed, or within the window. */
+export function isActiveBoardFlight(
+  flight: BoardFlight,
+  kind: BoardKind,
+  withinMinutes = 120,
+): boolean {
+  if (flight.status === 'estimated' || flight.status === 'delayed') return true
+
+  const scheduled = boardScheduledUnix(flight, kind)
+  if (scheduled == null) return false
+
+  const now = Math.floor(Date.now() / 1000)
+  const pastGrace = 20 * 60
+  const futureWindow = withinMinutes * 60
+  return scheduled >= now - pastGrace && scheduled <= now + futureWindow
+}
+
 /** Kiwi CDN — common IATA airline logos; returns null when code is missing/invalid. */
 export function airlineLogoUrl(iata: string | null | undefined): string | null {
   const code = iata?.trim().toUpperCase()
@@ -69,7 +132,8 @@ export function parseOverheadFlights(entity: HassEntity | undefined): OverheadFl
         altitude: asNumber(row.altitude),
         groundSpeed: asNumber(row.ground_speed),
         heading: asNumber(row.heading),
-        distance: asNumber(row.distance),
+        // FlightRadar24 reports distance in kilometers.
+        distance: asNumber(row.distance) * 0.621371,
         verticalSpeed: asNumber(row.vertical_speed),
         latitude: asNumber(row.latitude),
         longitude: asNumber(row.longitude),
@@ -114,6 +178,9 @@ export function parseBoardFlights(
       status,
       statusText: asString(row.status_text) ?? status,
       aircraftModel: asString(row.aircraft_model) ?? asString(row.aircraft_code) ?? '',
+      aircraftCode: asString(row.aircraft_code)?.toUpperCase() ?? null,
+      registration: asString(row.aircraft_registration),
+      photoUrl: boardFlightPhotoFromRow(row),
       scheduledArrivalUnix: asUnixTime(row.time_scheduled_arrival),
       scheduledDepartureUnix: asUnixTime(row.time_scheduled_departure),
       realArrivalUnix: asUnixTime(row.time_real_arrival),
@@ -315,6 +382,87 @@ export function boardDelayInfo(
   }
 
   return { label: `${deltaMin} min`, tone: 'good' }
+}
+
+/** Positive delay minutes for sorting; null when on time or unknown. */
+export function boardDelayMinutes(flight: BoardFlight, kind: BoardKind): number | null {
+  const scheduled = boardScheduledUnix(flight, kind)
+  const actual = boardActualUnix(flight, kind)
+  if (scheduled == null || actual == null) {
+    return flight.status === 'delayed' ? 1 : null
+  }
+
+  const deltaMin = Math.round((actual - scheduled) / 60)
+  if (deltaMin <= ON_TIME_THRESHOLD_MIN) return null
+  return deltaMin
+}
+
+export function filterOverheadByRole(
+  flights: OverheadFlight[],
+  airportCode: string | null | undefined,
+  role: OverheadAirportRole,
+  limit = 4,
+): OverheadFlight[] {
+  return flights
+    .filter((flight) => overheadAirportRole(flight, airportCode) === role)
+    .slice(0, limit)
+}
+
+export interface DelayedBoardFlight {
+  flight: BoardFlight
+  kind: BoardKind
+  delayMinutes: number
+}
+
+export function topDelayedBoardFlights(
+  arrivals: BoardFlight[],
+  departures: BoardFlight[],
+  limit = 4,
+): DelayedBoardFlight[] {
+  const items: DelayedBoardFlight[] = []
+
+  for (const flight of arrivals) {
+    const delayMinutes = boardDelayMinutes(flight, 'arrival')
+    if (delayMinutes != null && delayMinutes > 0) {
+      items.push({ flight, kind: 'arrival', delayMinutes })
+    }
+  }
+
+  for (const flight of departures) {
+    const delayMinutes = boardDelayMinutes(flight, 'departure')
+    if (delayMinutes != null && delayMinutes > 0) {
+      items.push({ flight, kind: 'departure', delayMinutes })
+    }
+  }
+
+  return items.sort((a, b) => b.delayMinutes - a.delayMinutes).slice(0, limit)
+}
+
+/** Compact time cell: scheduled, or scheduled→estimated when different. */
+export function boardTimeDisplay(flight: BoardFlight, kind: BoardKind): string {
+  const sched = boardScheduledTime(flight, kind)
+  const est = boardActualTime(flight, kind)
+  if (!sched) return est ?? '—'
+  if (!est) return sched
+  return `${sched}→${est}`
+}
+
+/** Short status when delay badge is not shown. */
+export function boardStatusShort(flight: BoardFlight, kind: BoardKind): string | null {
+  if (boardDelayInfo(flight, kind)) return null
+
+  switch (flight.status) {
+    case 'landed':
+      return 'Landed'
+    case 'estimated':
+      return 'Est'
+    case 'scheduled':
+      return 'Sched'
+    case 'delayed':
+      return 'Delayed'
+    default:
+      return null
+  }
 }
 
 export function boardStatusDisplay(flight: BoardFlight, kind: BoardKind): string {
@@ -585,26 +733,20 @@ export function computeRadarView(
     }
   }
 
-  const latitude =
-    positioned.reduce((sum, flight) => sum + flight.latitude, center.latitude) /
-    (positioned.length + 1)
-  const longitude =
-    positioned.reduce((sum, flight) => sum + flight.longitude, center.longitude) /
-    (positioned.length + 1)
-
+  // Keep the viewport anchored on the configured center so aircraft move across the map
+  // instead of the map re-centering on every position update.
   const distances = positioned.map((flight) =>
-    distanceMiles(latitude, longitude, flight.latitude, flight.longitude),
+    distanceMiles(center.latitude, center.longitude, flight.latitude, flight.longitude),
   )
-  distances.push(distanceMiles(latitude, longitude, center.latitude, center.longitude))
 
   const spanMiles = Math.max(...distances, 2)
-  const radiusMiles = clamp(spanMiles * 1.35 + 1.5, 4, 18)
+  const radiusMiles = clamp(Math.max(spanMiles * 1.35 + 1.5, fallbackRadius), fallbackRadius, 18)
 
   return {
-    latitude,
-    longitude,
+    latitude: center.latitude,
+    longitude: center.longitude,
     radiusMiles,
-    zoom: zoomForRadiusMiles(radiusMiles, latitude, mapSize),
+    zoom: zoomForRadiusMiles(radiusMiles, center.latitude, mapSize),
   }
 }
 

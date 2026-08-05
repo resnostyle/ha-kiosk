@@ -10,6 +10,8 @@ export interface EntityLabels {
   eveningChores?: Record<string, string>
   eveningKids?: Record<string, string>
   aqaraPresence?: Record<string, string>
+  playroomLights?: Record<string, string>
+  playroomScenes?: Record<string, string>
 }
 
 export interface EveningTomorrowConfig {
@@ -40,6 +42,26 @@ export interface MasterBedroomConfig {
   automationWhenOff: string
   doors: string[]
   covers: Record<string, string>
+}
+
+export interface PlayroomFeedConfig {
+  url: string
+  label?: string
+  maxItems?: number
+}
+
+export interface PlayroomSettleConfig {
+  idleSeconds?: number
+  spotlightSeconds?: number
+  feeds?: PlayroomFeedConfig[]
+  facts?: string[]
+  greetings?: string[]
+}
+
+export interface PlayroomConfig {
+  lights: Record<string, string>
+  scenes: Record<string, string>
+  settle?: PlayroomSettleConfig
 }
 
 export interface FlightMapCenter {
@@ -75,6 +97,7 @@ export interface EntityConfig {
   cameraOccupancy: Record<string, string>
   status: Record<string, string>
   masterBedroom: MasterBedroomConfig
+  playroom: PlayroomConfig
   evening: EveningConfig
   flightTracker: FlightTrackerConfig
   labels: EntityLabels
@@ -98,6 +121,8 @@ export function allEntityIds(config: EntityConfig = entityConfig): string[] {
     config.masterBedroom.automationWhenOff,
     ...config.masterBedroom.doors,
     ...Object.values(config.masterBedroom.covers),
+    ...Object.values(config.playroom.lights),
+    ...Object.values(config.playroom.scenes),
     ...Object.values(config.evening.chores).flat(),
     ...Object.values(config.evening.points ?? {}),
     config.evening.tomorrow.workdayCalendar,
@@ -183,4 +208,12 @@ export function eveningChoreLabel(entityId: string, entity?: HassEntity): string
 
 export function eveningCoverLabel(key: string): string {
   return entityConfig.labels.eveningCovers?.[key] ?? key
+}
+
+export function playroomLightLabel(key: string): string {
+  return entityConfig.labels.playroomLights?.[key] ?? key
+}
+
+export function playroomSceneLabel(key: string): string {
+  return entityConfig.labels.playroomScenes?.[key] ?? key
 }

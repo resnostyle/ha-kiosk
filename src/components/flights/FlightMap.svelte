@@ -3,7 +3,18 @@
   import 'leaflet/dist/leaflet.css'
   import type { FlightMapCenter } from '../../lib/config/types'
   import type { OverheadFlight } from '../../lib/flights/types'
-  import { computeRadarView, formatVerticalSpeed, hasMapPosition, overheadAirportRole, overheadAirportRoleLabel, overheadDelayInfo, overheadGroundDetail, overheadScheduleLine, readFlightMarkerColors, routeLabel } from '../../lib/flights/utils'
+  import {
+    computeRadarView,
+    formatVerticalSpeed,
+    hasMapPosition,
+    overheadAirportRole,
+    overheadAirportRoleLabel,
+    overheadDelayInfo,
+    overheadGroundDetail,
+    overheadScheduleLine,
+    readFlightMarkerColors,
+    routeLabel,
+  } from '../../lib/flights/utils'
 
   interface Props {
     flights: OverheadFlight[]
@@ -17,14 +28,26 @@
   let mapEl = $state<HTMLDivElement | null>(null)
   let mapReady = $state(false)
   let map: L.Map | null = null
-  let markersLayer: L.LayerGroup | null = null
+  let centerLayer: L.LayerGroup | null = null
+  let flightLayer: L.LayerGroup | null = null
   let rangeLayer: L.Circle | null = null
   let mapSize = $state({ width: 720, height: 280 })
-  let syncRequest = 0
   let markerColors = $state(readFlightMarkerColors())
+  const flightMarkers = new Map<string, L.Marker>()
 
   const positionedFlights = $derived(flights.filter(hasMapPosition))
   const radarView = $derived(computeRadarView(positionedFlights, center, mapSize))
+  const flightTrackKey = $derived(
+    positionedFlights
+      .map(
+        (flight) =>
+          `${flight.id}:${flight.latitude.toFixed(5)}:${flight.longitude.toFixed(5)}:${Math.round(flight.heading)}`,
+      )
+      .join('|'),
+  )
+  const viewportKey = $derived(
+    `${radarView.latitude.toFixed(5)}:${radarView.longitude.toFixed(5)}:${radarView.zoom}:${radarView.radiusMiles.toFixed(1)}`,
+  )
 
   function flightLabel(flight: OverheadFlight): string {
     return flight.flightNumber ?? flight.callsign
@@ -94,56 +117,79 @@
       .addTo(layer)
   }
 
-  function syncMapView() {
+  function syncRangeCircle(view: typeof radarView) {
+    if (!map) return
+
+    if (rangeLayer) {
+      rangeLayer.remove()
+      rangeLayer = null
+    }
+
+    if (!Number.isFinite(view.radiusMiles) || view.radiusMiles <= 0) return
+
+    rangeLayer = L.circle([view.latitude, view.longitude], {
+      radius: view.radiusMiles * 1609.344,
+      color: markerColors.accent,
+      opacity: 0.45,
+      weight: 1,
+      fillColor: markerColors.accent,
+      fillOpacity: 0.06,
+      dashArray: '5 7',
+    }).addTo(map)
+  }
+
+  function syncFlightMarkers() {
+    const layer = flightLayer
+    if (!layer) return
+
+    const seen = new Set<string>()
+
+    for (const flight of positionedFlights) {
+      seen.add(flight.id)
+      const latLng = L.latLng(flight.latitude, flight.longitude)
+      const icon = createPlaneIcon(flight)
+      const popup = popupHtml(flight)
+      const existing = flightMarkers.get(flight.id)
+
+      if (existing) {
+        existing.setLatLng(latLng)
+        existing.setIcon(icon)
+        existing.setPopupContent(popup)
+        continue
+      }
+
+      const marker = L.marker(latLng, { icon })
+        .bindPopup(popup, { closeButton: false, maxWidth: 240 })
+        .addTo(layer)
+      flightMarkers.set(flight.id, marker)
+    }
+
+    for (const [id, marker] of flightMarkers) {
+      if (seen.has(id)) continue
+      marker.remove()
+      flightMarkers.delete(id)
+    }
+  }
+
+  function syncMapViewport() {
     const activeMap = map
-    const layer = markersLayer
+    const layer = centerLayer
     if (!activeMap || !layer) return
 
     const size = activeMap.getSize()
     if (size.x < 2 || size.y < 2) return
 
-    const { latitude, longitude, zoom, radiusMiles } = radarView
+    const { latitude, longitude, zoom } = radarView
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(zoom)) {
       return
     }
 
-    const requestId = ++syncRequest
-
     activeMap.setView([latitude, longitude], zoom, { animate: false })
     activeMap.invalidateSize()
 
-    activeMap.whenReady(() => {
-      if (!map || map !== activeMap || !markersLayer || requestId !== syncRequest) return
-
-      const mapSizeNow = map.getSize()
-      if (mapSizeNow.x < 2 || mapSizeNow.y < 2) return
-
-      markersLayer.clearLayers()
-      addCenterMarker(markersLayer)
-
-      if (rangeLayer) {
-        rangeLayer.remove()
-        rangeLayer = null
-      }
-
-      if (Number.isFinite(radiusMiles) && radiusMiles > 0) {
-        rangeLayer = L.circle([latitude, longitude], {
-          radius: radiusMiles * 1609.344,
-          color: markerColors.accent,
-          opacity: 0.45,
-          weight: 1,
-          fillColor: markerColors.accent,
-          fillOpacity: 0.06,
-          dashArray: '5 7',
-        }).addTo(map)
-      }
-
-      for (const flight of positionedFlights) {
-        L.marker([flight.latitude, flight.longitude], { icon: createPlaneIcon(flight) })
-          .bindPopup(popupHtml(flight), { closeButton: false, maxWidth: 240 })
-          .addTo(markersLayer)
-      }
-    })
+    layer.clearLayers()
+    addCenterMarker(layer)
+    syncRangeCircle(radarView)
   }
 
   $effect(() => {
@@ -157,7 +203,8 @@
       if (width < 1 || height < 1) return
       mapSize = { width, height }
       map?.invalidateSize()
-      syncMapView()
+      syncMapViewport()
+      syncFlightMarkers()
     })
     observer.observe(el)
 
@@ -175,21 +222,27 @@
       maxZoom: 19,
     }).addTo(map)
 
-    markersLayer = L.layerGroup().addTo(map)
+    centerLayer = L.layerGroup().addTo(map)
+    flightLayer = L.layerGroup().addTo(map)
 
     requestAnimationFrame(() => {
       map?.invalidateSize()
-      syncMapView()
+      syncMapViewport()
+      syncFlightMarkers()
       mapReady = true
     })
 
     return () => {
       observer.disconnect()
-      syncRequest++
       rangeLayer?.remove()
+      for (const marker of flightMarkers.values()) {
+        marker.remove()
+      }
+      flightMarkers.clear()
       map?.remove()
       map = null
-      markersLayer = null
+      centerLayer = null
+      flightLayer = null
       rangeLayer = null
       mapReady = false
     }
@@ -197,28 +250,27 @@
 
   $effect(() => {
     if (!mapReady) return
-    void flights
-    void radarView
-    syncMapView()
+    void viewportKey
+    syncMapViewport()
+  })
+
+  $effect(() => {
+    if (!mapReady) return
+    void flightTrackKey
+    syncFlightMarkers()
   })
 </script>
 
 <section class="flight-map panel" class:flight-map--sidebar={layout === 'sidebar'}>
   <header class="flight-map-header">
-    <div>
-      <h2 class="section-label">Area map</h2>
-      <p class="flight-map-legend">
-        <span class="legend-dot legend-arrival"></span> Arriving
-        <span class="legend-dot legend-departure"></span> Departing
-        <span class="legend-dot legend-airborne"></span> Airborne
-        <span class="legend-dot legend-tracked"></span> Tracked
-        <span class="legend-dot legend-ground"></span> On ground
-        <span class="flight-map-radius">~{radarView.radiusMiles.toFixed(0)} mi view</span>
-      </p>
-    </div>
-    <span class="flight-map-count">
-      {positionedFlights.length} aircraft
-    </span>
+    <p class="flight-map-legend" aria-label="Map legend">
+      <span class="legend-dot legend-arrival" title="Arriving"></span>
+      <span class="legend-dot legend-departure" title="Departing"></span>
+      <span class="legend-dot legend-airborne" title="Airborne"></span>
+      <span class="legend-dot legend-tracked" title="Tracked"></span>
+      <span class="legend-dot legend-ground" title="On ground"></span>
+      <span class="flight-map-radius">{positionedFlights.length} · ~{radarView.radiusMiles.toFixed(0)} mi</span>
+    </p>
   </header>
 
   <div class="flight-map-frame">
@@ -238,8 +290,8 @@
   .flight-map {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    padding: 0.75rem;
+    gap: 0.2rem;
+    padding: 0.4rem;
     max-width: 52rem;
     width: 100%;
     margin-inline: auto;
@@ -256,35 +308,32 @@
 
   .flight-map--sidebar .flight-map-frame {
     flex: 1;
-    min-height: 12rem;
+    min-height: 10rem;
     height: auto;
   }
 
   .flight-map-header {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
-    gap: 0.5rem;
-  }
-
-  .flight-map-count {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
+    gap: 0.35rem;
     flex-shrink: 0;
   }
 
   .flight-map-legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem 0.75rem;
-    margin: 0.25rem 0 0;
-    font-size: 0.625rem;
+    align-items: center;
+    gap: 0.28rem 0.4rem;
+    margin: 0;
+    font-size: 0.5625rem;
     color: var(--color-text-muted);
   }
 
   .flight-map-radius {
-    margin-left: 0.15rem;
-    opacity: 0.85;
+    margin-left: 0.1rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
   }
 
   .legend-dot {
@@ -319,7 +368,7 @@
   .flight-map-frame {
     position: relative;
     width: 100%;
-    height: clamp(11rem, 34vw, 15rem);
+    height: clamp(9rem, 28vw, 12rem);
     border-radius: 0.75rem;
     overflow: hidden;
   }

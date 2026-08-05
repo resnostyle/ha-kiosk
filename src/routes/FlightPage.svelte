@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { fade, fly } from 'svelte/transition'
-  import { flip } from 'svelte/animate'
   import ConnectionBanner from '../components/ConnectionBanner.svelte'
   import ClockHeader from '../components/ClockHeader.svelte'
   import FlightBoard from '../components/flights/FlightBoard.svelte'
   import FlightMap from '../components/flights/FlightMap.svelte'
-  import FlightOverheadCard from '../components/flights/FlightOverheadCard.svelte'
+  import FlightCarousel, {
+    type FlightCarouselSlide,
+  } from '../components/flights/OverheadCarousel.svelte'
   import FlightStats from '../components/flights/FlightStats.svelte'
   import { entityConfig } from '../lib/config/types'
   import {
@@ -13,12 +13,14 @@
     delayMinutesTone,
     overheadTone,
     countBoardFlightsByAirline,
+    enrichBoardFlightsFromOverhead,
     parseBoardFlights,
     parseOverheadFlights,
     sensorCount,
     sortBoardFlights,
     sortOverheadByAirportRole,
     statDisplayValue,
+    topDelayedBoardFlights,
   } from '../lib/flights/utils'
   import type { FlightStatGroup, FlightStatItem } from '../lib/flights/types'
   import { createFreshIdTracker } from '../lib/flights/freshIds.svelte'
@@ -27,7 +29,6 @@
 
   const store = useEntityStore()
   const ft = entityConfig.flightTracker
-  const overheadFresh = createFreshIdTracker()
   const arrivalsFresh = createFreshIdTracker()
   const departuresFresh = createFreshIdTracker()
 
@@ -46,24 +47,80 @@
     ),
   )
   const arrivalsAll = $derived(
-    sortBoardFlights(
-      parseBoardFlights(store.entity(ft.airportArrivals), { limit: null }),
-      'arrival',
+    enrichBoardFlightsFromOverhead(
+      sortBoardFlights(
+        parseBoardFlights(store.entity(ft.airportArrivals), { limit: null }),
+        'arrival',
+      ),
+      overhead,
     ),
   )
   const departuresAll = $derived(
-    sortBoardFlights(
-      parseBoardFlights(store.entity(ft.airportDepartures), { limit: null }),
-      'departure',
+    enrichBoardFlightsFromOverhead(
+      sortBoardFlights(
+        parseBoardFlights(store.entity(ft.airportDepartures), { limit: null }),
+        'departure',
+      ),
+      overhead,
     ),
   )
-  const arrivals = $derived(arrivalsAll.slice(0, 18))
-  const departures = $derived(departuresAll.slice(0, 18))
+  const arrivals = $derived(arrivalsAll.slice(0, 24))
+  const departures = $derived(departuresAll.slice(0, 24))
   const arrivalAirlines = $derived(countBoardFlightsByAirline(arrivalsAll))
   const departureAirlines = $derived(countBoardFlightsByAirline(departuresAll))
 
+  const carouselSlides = $derived.by((): FlightCarouselSlide[] => {
+    const hub = airportCode === '—' ? 'airport' : airportCode
+    const slides: FlightCarouselSlide[] = []
+
+    if (overhead.length > 0) {
+      slides.push({
+        id: 'overhead',
+        title: `Overhead · ${overhead.length}`,
+        symbol: '◎',
+        emptyText: 'No aircraft overhead',
+        overheadFlights: overhead.slice(0, 6),
+      })
+    }
+
+    slides.push(
+      {
+        id: 'departures',
+        title: `Departing ${hub}`,
+        symbol: '↑',
+        emptyText: 'No upcoming departures',
+        boardFlights: departuresAll
+          .slice(0, 6)
+          .map((flight) => ({ flight, kind: 'departure' as const })),
+      },
+      {
+        id: 'arrivals',
+        title: `Arriving ${hub}`,
+        symbol: '↓',
+        emptyText: 'No upcoming arrivals',
+        boardFlights: arrivalsAll
+          .slice(0, 6)
+          .map((flight) => ({ flight, kind: 'arrival' as const })),
+      },
+      {
+        id: 'delayed',
+        title: 'Most delayed',
+        symbol: '⏱',
+        emptyText: 'No delayed flights right now',
+        delayedFlights: topDelayedBoardFlights(arrivalsAll, departuresAll, 6),
+      },
+    )
+
+    return slides
+  })
+
+  const carouselLive = $derived(
+    overheadLive ||
+      arrivals.some((flight) => arrivalsFresh.freshIds.has(flight.id)) ||
+      departures.some((flight) => departuresFresh.freshIds.has(flight.id)),
+  )
+
   $effect(() => {
-    overheadFresh.sync(overhead.map((flight) => flight.id))
     arrivalsFresh.sync(arrivals.map((flight) => flight.id))
     departuresFresh.sync(departures.map((flight) => flight.id))
   })
@@ -98,7 +155,7 @@
     const areaStats: FlightStatItem[] = [
       {
         id: 'overhead',
-        label: 'Overhead now',
+        label: 'Overhead',
         value: overhead.length,
         tone: overheadTone(overhead.length),
       },
@@ -107,7 +164,7 @@
     if (ft.enteredArea) {
       areaStats.push({
         id: 'entered',
-        label: 'Entered today',
+        label: 'Entered',
         value: statDisplayValue(entered),
         tone: 'neutral' as const,
       })
@@ -116,7 +173,7 @@
     return [
       {
         id: 'area',
-        title: 'Tracking area',
+        title: 'Area',
         symbol: '✈',
         stats: areaStats,
       },
@@ -127,13 +184,13 @@
         stats: [
           {
             id: 'arr-delayed',
-            label: 'Delayed flights',
+            label: 'Arr delayed',
             value: statDisplayValue(arrDelayed),
             tone: delayCountTone(arrDelayed),
           },
           {
             id: 'arr-avg',
-            label: 'Average delay',
+            label: 'Arr avg',
             value: statDisplayValue(arrAvg),
             unit: 'min',
             tone: delayMinutesTone(arrAvg),
@@ -147,13 +204,13 @@
         stats: [
           {
             id: 'dep-delayed',
-            label: 'Delayed flights',
+            label: 'Dep delayed',
             value: statDisplayValue(depDelayed),
             tone: delayCountTone(depDelayed),
           },
           {
             id: 'dep-avg',
-            label: 'Average delay',
+            label: 'Dep avg',
             value: statDisplayValue(depAvg),
             unit: 'min',
             tone: delayMinutesTone(depAvg),
@@ -169,13 +226,11 @@
 
   <header class="flight-page-header panel">
     <div class="flight-page-header-main">
-      <p class="flight-page-eyebrow">Flight tracker</p>
       <h1 class="flight-page-airport">{airportCode}</h1>
+      <FlightStats groups={statGroups} />
     </div>
     <ClockHeader compact />
   </header>
-
-  <FlightStats groups={statGroups} />
 
   <section class="flight-radar">
     <div class="flight-radar-map">
@@ -183,32 +238,13 @@
     </div>
 
     <aside class="flight-radar-overhead panel">
-      <header class="flight-radar-overhead-header">
-        <h2 class="section-label">
-          Overhead now
-          {#if overheadLive}
-            <span class="flight-live-dot" aria-hidden="true"></span>
-          {/if}
-        </h2>
-      </header>
-
-      {#if overhead.length === 0}
-        <p class="flight-overhead-empty" in:fade={{ duration: 200 }}>No aircraft in the tracking area</p>
-      {:else}
-        <div class="flight-radar-list">
-          {#each overhead as flight (flight.id)}
-            <div
-              class="flight-radar-item"
-              class:flight-item-fresh={overheadFresh.freshIds.has(flight.id)}
-              animate:flip={{ duration: 320 }}
-              in:fly={{ y: 12, duration: 240 }}
-              out:fade={{ duration: 160 }}
-            >
-              <FlightOverheadCard {flight} {airportCode} compact />
-            </div>
-          {/each}
-        </div>
-      {/if}
+      <FlightCarousel
+        slides={carouselSlides}
+        live={carouselLive}
+        {airportCode}
+        isFresh={(id) =>
+          arrivalsFresh.freshIds.has(id) || departuresFresh.freshIds.has(id)}
+      />
     </aside>
   </section>
 
@@ -239,41 +275,41 @@
     min-height: 100dvh;
     display: flex;
     flex-direction: column;
-    gap: 0.85rem;
-    padding: 1rem 1rem 4.5rem;
-    padding-top: 1.25rem;
+    gap: 0.4rem;
+    padding: 0.55rem 0.65rem 3.5rem;
+    padding-top: 0.75rem;
   }
 
   .flight-page-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
-    padding: 0.85rem 1rem;
+    gap: 0.65rem;
+    padding: 0.45rem 0.6rem;
   }
 
-  .flight-page-eyebrow {
-    margin: 0;
-    font-size: 0.6875rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--color-text-muted);
+  .flight-page-header-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 0;
+    flex: 1;
   }
 
   .flight-page-airport {
-    margin: 0.15rem 0 0;
-    font-size: 2rem;
+    margin: 0;
+    font-size: 1.35rem;
     font-weight: 700;
     letter-spacing: 0.04em;
+    line-height: 1;
   }
 
   .flight-radar {
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-    gap: 0.85rem;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    gap: 0.4rem;
     align-items: stretch;
-    min-height: clamp(14rem, 38vh, 22rem);
+    min-height: clamp(12rem, 32vh, 18rem);
   }
 
   .flight-radar-map {
@@ -285,45 +321,15 @@
   .flight-radar-overhead {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    padding: 0.75rem;
+    padding: 0.4rem;
     min-width: 0;
     min-height: 0;
-  }
-
-  .flight-radar-overhead-header {
-    flex-shrink: 0;
-  }
-
-  .flight-radar-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    overflow-y: auto;
-    min-height: 0;
-    flex: 1;
-    padding-right: 0.1rem;
-  }
-
-  .flight-radar-item {
-    border-radius: 0.65rem;
-  }
-
-  .flight-overhead-empty {
-    margin: 0;
-    padding: 1rem 0.5rem;
-    text-align: center;
-    color: var(--color-text-muted);
-    font-size: 0.875rem;
-    flex: 1;
-    display: grid;
-    place-items: center;
   }
 
   .flight-boards {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.85rem;
+    gap: 0.4rem;
     flex: 1;
     min-height: 0;
   }
@@ -335,11 +341,7 @@
     }
 
     .flight-radar-map {
-      min-height: clamp(11rem, 34vw, 15rem);
-    }
-
-    .flight-radar-list {
-      max-height: none;
+      min-height: clamp(9rem, 28vw, 12rem);
     }
 
     .flight-boards {

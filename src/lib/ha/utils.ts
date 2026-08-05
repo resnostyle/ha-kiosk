@@ -42,6 +42,12 @@ export function isOn(entity: HassEntity | undefined): boolean {
   return entity?.state === 'on'
 }
 
+export function lightBrightnessPercent(entity: HassEntity | undefined): number | null {
+  const brightness = entity?.attributes?.brightness
+  if (typeof brightness !== 'number') return null
+  return Math.round((brightness / 255) * 100)
+}
+
 export function isCoverOpen(entity: HassEntity | undefined): boolean {
   return entity?.state === 'open'
 }

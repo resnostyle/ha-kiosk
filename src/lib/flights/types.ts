@@ -40,6 +40,9 @@ export interface BoardFlight {
   status: string
   statusText: string
   aircraftModel: string
+  aircraftCode: string | null
+  registration: string | null
+  photoUrl: string | null
   scheduledArrivalUnix: number | null
   scheduledDepartureUnix: number | null
   realArrivalUnix: number | null
