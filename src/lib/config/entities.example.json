@@ -39,6 +39,87 @@
       "garageDoor": "cover.garage_door"
     }
   },
+  "playroom": {
+    "lights": {
+      "overhead": "light.playroom_dimmer",
+      "hue": "light.playroom"
+    },
+    "scenes": {
+      "nightlight": "scene.playroom_nightlight",
+      "rest": "scene.playroom_rest",
+      "relax": "scene.playroom_relax",
+      "read": "scene.playroom_read"
+    },
+    "settle": {
+      "idleSeconds": 120,
+      "spotlightSeconds": 12,
+      "feeds": [
+        {
+          "url": "https://feeds.bbci.co.uk/newsround/rss.xml",
+          "label": "Newsround",
+          "maxItems": 5
+        },
+        {
+          "url": "https://www.nasa.gov/rss/dyn/breaking_news.rss",
+          "label": "NASA",
+          "maxItems": 4
+        }
+      ],
+      "greetings": [
+        "Welcome to the playroom!",
+        "Ready for an adventure?",
+        "What should we build today?"
+      ],
+      "facts": [
+        "Honey never spoils — archaeologists have found 3,000-year-old honey that was still good.",
+        "Octopuses have three hearts and blue blood.",
+        "A group of flamingos is called a flamboyance.",
+        "Bananas are berries, but strawberries are not.",
+        "The shortest war in history lasted 38 minutes."
+      ]
+    }
+  },
+  "evening": {
+    "chores": {
+      "kaylen": [
+        "sensor.kaylen_choreops_chore_status_dosage",
+        "sensor.kaylen_choreops_chore_status_dishes_unload",
+        "sensor.kaylen_choreops_chore_status_take_out_trash"
+      ],
+      "maya": [
+        "sensor.maya_choreops_chore_status_brush_teeth",
+        "sensor.maya_choreops_chore_status_load_dishwasher",
+        "sensor.maya_choreops_chore_status_start_dishwash"
+      ]
+    },
+    "points": {
+      "kaylen": "sensor.kaylen_choreops_points",
+      "maya": "sensor.maya_choreops_points"
+    },
+    "tomorrow": {
+      "workdayCalendar": "calendar.workday_sensor_calendar",
+      "personalCalendar": "calendar.personal_2",
+      "sunrise": "sensor.sun_next_rising"
+    },
+    "security": {
+      "doors": [
+        "binary_sensor.front_door_sensor_door",
+        "binary_sensor.garage_inside_door_door"
+      ],
+      "covers": {
+        "garage": "cover.ratgdov25i_e5a212_door"
+      },
+      "locks": {
+        "garage": "lock.ratgdov25i_e5a212_lock_remotes"
+      },
+      "alarm": "alarm_control_panel.alarmo",
+      "downstairsOccupancy": "binary_sensor.downstairs_occupancy"
+    },
+    "todos": {
+      "groceries": "todo.groceries_2",
+      "costco": "todo.costco_2"
+    }
+  },
   "flightTracker": {
     "airportTrack": "text.flightradar24_airport_track",
     "currentInArea": "sensor.flightradar24_current_in_area",
@@ -48,6 +129,12 @@
     "departuresDelayed": "sensor.flightradar24_airport_departures_delayed",
     "arrivalsDelayAverage": "sensor.flightradar24_airport_arrivals_delay_average",
     "departuresDelayAverage": "sensor.flightradar24_airport_departures_delay_average",
+    "arrivalsOnTime": "sensor.flightradar24_airport_arrivals_on_time",
+    "departuresOnTime": "sensor.flightradar24_airport_departures_on_time",
+    "arrivalsCanceled": "sensor.flightradar24_airport_arrivals_canceled",
+    "departuresCanceled": "sensor.flightradar24_airport_departures_canceled",
+    "arrivalsDelayIndex": "sensor.flightradar24_airport_arrivals_delay_index",
+    "departuresDelayIndex": "sensor.flightradar24_airport_departures_delay_index",
     "enteredArea": "sensor.flightradar24_entered_area",
     "exitedArea": "sensor.flightradar24_exited_area",
     "mapCenter": {
@@ -72,9 +159,27 @@
     "masterBedroomCovers": {
       "garageDoor": "Garage Door"
     },
+    "eveningCovers": {
+      "garage": "Garage Door"
+    },
+    "eveningKids": {
+      "kaylen": "Kaylen",
+      "maya": "Maya"
+    },
+    "eveningChores": {},
     "aqaraPresence": {
       "binary_sensor.fp2_zone_1": "Zone 1",
       "binary_sensor.fp2_zone_2": "Zone 2"
+    },
+    "playroomLights": {
+      "overhead": "Overhead",
+      "hue": "Playroom"
+    },
+    "playroomScenes": {
+      "nightlight": "Nightlight",
+      "rest": "Rest",
+      "relax": "Relax",
+      "read": "Read"
     }
   }
 }

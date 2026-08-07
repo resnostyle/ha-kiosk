@@ -1,6 +1,6 @@
 import type { HassEntity } from 'home-assistant-js-websocket'
 import { isEntityAvailable } from '../ha/utils'
-import type { BoardAirlineCount, BoardFlight, BoardKind, FlightStatTone, OverheadAirportRole, OverheadDelayInfo, OverheadFlight } from './types'
+import type { BoardAirlineCount, BoardFlight, BoardKind, AircraftManufacturer, AircraftManufacturerCounts, BoardSpotlightPair, FlightStatTone, InterestingBoardFlight, InterestingFlightReason, OverheadAirportRole, OverheadDelayInfo, OverheadFlight, SpotlightFlight, SpotlightReason } from './types'
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
@@ -19,6 +19,463 @@ export function sanitizePhotoUrl(value: unknown): string | null {
   const raw = asString(value)
   if (!raw) return null
   return raw.replace(/^https:+(https?:\/\/)/, '$1')
+}
+
+/** FR24 aircraft-type sideview when no registration photo is available. */
+export function aircraftTypePhotoUrl(aircraftCode: string | null | undefined): string | null {
+  const code = aircraftCode?.trim().toUpperCase()
+  if (!code || !/^[A-Z0-9]{2,4}$/.test(code)) return null
+  return `https://www.flightradar24.com/static/images/sideviews/thumbnails/${code}.jpg`
+}
+
+function boardFlightPhotoFromRow(row: Record<string, unknown>): string | null {
+  return (
+    sanitizePhotoUrl(row.aircraft_photo_medium) ??
+    sanitizePhotoUrl(row.aircraft_photo_small) ??
+    sanitizePhotoUrl(row.aircraft_photo_large) ??
+    aircraftTypePhotoUrl(asString(row.aircraft_code))
+  )
+}
+
+function flightLookupKey(flightNumber: string | null | undefined, callsign?: string | null): string {
+  const raw = flightNumber ?? callsign ?? ''
+  return raw.replace(/\s/g, '').toUpperCase()
+}
+
+/** Prefer live overhead photos (often JetPhotos) over type silhouettes. */
+export function enrichBoardFlightsFromOverhead(
+  boardFlights: BoardFlight[],
+  overheadFlights: OverheadFlight[],
+): BoardFlight[] {
+  if (overheadFlights.length === 0) return boardFlights
+
+  const photos = new Map<string, string>()
+  for (const flight of overheadFlights) {
+    if (!flight.photoUrl) continue
+    const keys = [flightLookupKey(flight.flightNumber), flightLookupKey(flight.callsign)].filter(
+      Boolean,
+    )
+    for (const key of keys) {
+      photos.set(key, flight.photoUrl)
+    }
+  }
+
+  return boardFlights.map((flight) => {
+    const key = flightLookupKey(flight.flightNumber)
+    const photoUrl = photos.get(key) ?? flight.photoUrl
+    return photoUrl === flight.photoUrl ? flight : { ...flight, photoUrl }
+  })
+}
+
+/** Flights actively arriving or departing soon — estimated, delayed, or within the window. */
+export function isActiveBoardFlight(
+  flight: BoardFlight,
+  kind: BoardKind,
+  withinMinutes = 120,
+): boolean {
+  if (flight.status === 'estimated' || flight.status === 'delayed') return true
+
+  const scheduled = boardScheduledUnix(flight, kind)
+  if (scheduled == null) return false
+
+  const now = Math.floor(Date.now() / 1000)
+  const pastGrace = 20 * 60
+  const futureWindow = withinMinutes * 60
+  return scheduled >= now - pastGrace && scheduled <= now + futureWindow
+}
+
+const HEAVY_AIRCRAFT_PATTERN =
+  /\b(A30|A33|A35|A38|A340|A350|A380|B74|B75|B76|B77|B78|74F|74N|748|748F|763|77F|77W|78X)\b/i
+const CARGO_AIRLINE_IATA = new Set(['FX', '5X', 'GTI', 'CLX', 'BY', '8C', 'ATN'])
+
+const MODEL_MANUFACTURER: [RegExp, AircraftManufacturer][] = [
+  [/\bairbus\b/i, 'airbus'],
+  [/\bboeing\b/i, 'boeing'],
+  [/\bembraer\b/i, 'embraer'],
+  [/\bmitsubishi\b/i, 'mitsubishi'],
+  [/\bbombardier\b/i, 'bombardier'],
+]
+
+const CODE_MANUFACTURER: [RegExp, AircraftManufacturer][] = [
+  [/^BCS/, 'airbus'],
+  [/^A[23]/, 'airbus'],
+  [/^B[37]/, 'boeing'],
+  [/^E7/, 'embraer'],
+  [/^CRJ/, 'mitsubishi'],
+]
+
+export function detectAircraftManufacturer(
+  aircraftCode: string | null | undefined,
+  aircraftModel: string | null | undefined,
+): AircraftManufacturer | null {
+  const model = aircraftModel?.trim() ?? ''
+  if (model) {
+    for (const [pattern, manufacturer] of MODEL_MANUFACTURER) {
+      if (pattern.test(model)) return manufacturer
+    }
+  }
+
+  const code = aircraftCode?.trim().toUpperCase() ?? ''
+  if (code) {
+    for (const [pattern, manufacturer] of CODE_MANUFACTURER) {
+      if (pattern.test(code)) return manufacturer
+    }
+  }
+
+  return null
+}
+
+export function aircraftManufacturerLabel(manufacturer: AircraftManufacturer): string {
+  switch (manufacturer) {
+    case 'airbus':
+      return 'Airbus'
+    case 'boeing':
+      return 'Boeing'
+    case 'embraer':
+      return 'Embraer'
+    case 'mitsubishi':
+      return 'Mitsubishi'
+    case 'bombardier':
+      return 'Bombardier'
+    case 'other':
+      return 'Other'
+  }
+}
+
+export function countAirbusBoeingFlights(
+  arrivals: BoardFlight[],
+  departures: BoardFlight[],
+): AircraftManufacturerCounts {
+  const counts: AircraftManufacturerCounts = { airbus: 0, boeing: 0, other: 0 }
+
+  for (const flight of [...arrivals, ...departures]) {
+    const manufacturer = detectAircraftManufacturer(flight.aircraftCode, flight.aircraftModel)
+    if (manufacturer === 'airbus') counts.airbus++
+    else if (manufacturer === 'boeing') counts.boeing++
+    else if (manufacturer != null) counts.other++
+  }
+
+  return counts
+}
+
+export function formatAirbusBoeingMix(counts: AircraftManufacturerCounts): string {
+  if (counts.airbus === 0 && counts.boeing === 0) return '—'
+  return `${counts.airbus} / ${counts.boeing}`
+}
+
+export function isHeavyAircraft(aircraftCode: string | null, aircraftModel: string): boolean {
+  const code = aircraftCode?.trim() ?? ''
+  const model = aircraftModel.trim()
+  if (!code && !model) return false
+  return HEAVY_AIRCRAFT_PATTERN.test(code) || HEAVY_AIRCRAFT_PATTERN.test(model)
+}
+
+export function isCargoBoardFlight(flight: BoardFlight): boolean {
+  const iata = flight.airlineIata?.toUpperCase()
+  if (iata && CARGO_AIRLINE_IATA.has(iata)) return true
+  const number = flight.flightNumber.toUpperCase()
+  return /^(FX|FDX|5X|UPS)\d/.test(number)
+}
+
+export function formatAircraftLabel(flight: Pick<BoardFlight, 'aircraftCode' | 'aircraftModel' | 'registration'>): string {
+  const type = flight.aircraftCode ?? flight.aircraftModel.split(/\s+/)[0] ?? ''
+  const reg = flight.registration?.trim()
+  if (type && reg) return `${type} · ${reg}`
+  return type || reg || '—'
+}
+
+export function interestingBoardFlights(
+  arrivals: BoardFlight[],
+  departures: BoardFlight[],
+  overhead: OverheadFlight[],
+  limit = 6,
+): InterestingBoardFlight[] {
+  const liveKeys = new Set(
+    overhead.flatMap((flight) => [flightLookupKey(flight.flightNumber), flightLookupKey(flight.callsign)]),
+  )
+  const seen = new Set<string>()
+  const items: InterestingBoardFlight[] = []
+
+  const candidates: InterestingBoardFlight[] = []
+
+  for (const flight of arrivals) {
+    if (!isActiveBoardFlight(flight, 'arrival', 90)) continue
+    let reason: InterestingFlightReason | null = null
+    if (liveKeys.has(flightLookupKey(flight.flightNumber))) reason = 'live'
+    else if (isHeavyAircraft(flight.aircraftCode, flight.aircraftModel)) reason = 'heavy'
+    else if (isCargoBoardFlight(flight)) reason = 'cargo'
+    if (reason) candidates.push({ flight, kind: 'arrival', reason })
+  }
+
+  for (const flight of departures) {
+    if (!isActiveBoardFlight(flight, 'departure', 90)) continue
+    let reason: InterestingFlightReason | null = null
+    if (liveKeys.has(flightLookupKey(flight.flightNumber))) reason = 'live'
+    else if (isHeavyAircraft(flight.aircraftCode, flight.aircraftModel)) reason = 'heavy'
+    else if (isCargoBoardFlight(flight)) reason = 'cargo'
+    if (reason) candidates.push({ flight, kind: 'departure', reason })
+  }
+
+  const rank: Record<InterestingFlightReason, number> = { live: 0, heavy: 1, cargo: 2 }
+  candidates.sort(
+    (a, b) =>
+      rank[a.reason] - rank[b.reason] ||
+      (boardScheduledUnix(a.flight, a.kind) ?? 0) - (boardScheduledUnix(b.flight, b.kind) ?? 0),
+  )
+
+  for (const item of candidates) {
+    const key = `${item.kind}-${item.flight.id}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    items.push(item)
+    if (items.length >= limit) break
+  }
+
+  return items
+}
+
+export function interestingFlightReasonLabel(reason: InterestingFlightReason): string {
+  switch (reason) {
+    case 'live':
+      return 'Live'
+    case 'heavy':
+      return 'Heavy'
+    case 'cargo':
+      return 'Cargo'
+  }
+}
+
+export function spotlightReasonLabel(reason: SpotlightReason): string {
+  switch (reason) {
+    case 'overhead':
+      return 'Overhead'
+    case 'delayed':
+      return 'Delayed'
+    default:
+      return interestingFlightReasonLabel(reason)
+  }
+}
+
+function findOverheadMatch(overhead: OverheadFlight[], flightNumber: string): OverheadFlight | null {
+  const key = flightLookupKey(flightNumber)
+  return (
+    overhead.find(
+      (flight) =>
+        flightLookupKey(flight.flightNumber) === key || flightLookupKey(flight.callsign) === key,
+    ) ?? null
+  )
+}
+
+export function boardRouteLabel(
+  flight: BoardFlight,
+  kind: BoardKind,
+  airportCode: string | null,
+): string {
+  const hub = airportCode && airportCode !== '—' ? airportCode : 'RDU'
+  if (kind === 'arrival') return `${flight.airportCode} → ${hub}`
+  return `${hub} → ${flight.airportCode}`
+}
+
+export function buildSpotlightPool(
+  arrivals: BoardFlight[],
+  departures: BoardFlight[],
+  overhead: OverheadFlight[],
+  airportCode: string | null,
+  limit = 8,
+): SpotlightFlight[] {
+  const items = new Map<string, SpotlightFlight>()
+
+  const upsert = (candidate: SpotlightFlight) => {
+    const existing = items.get(candidate.id)
+    if (!existing || candidate.score > existing.score) {
+      items.set(candidate.id, candidate)
+    }
+  }
+
+  for (const flight of overhead) {
+    const role = overheadAirportRole(flight, airportCode)
+    let score = 42
+    let reason: SpotlightReason = 'overhead'
+    if (role) {
+      score = 108 - Math.min(flight.distance, 35)
+      reason = 'live'
+    }
+    if (flight.photoUrl) score += 12
+    if (flight.tracked) score += 6
+    if (isHeavyAircraft(flight.aircraftCode, flight.aircraftModel)) score += 8
+
+    upsert({
+      id: `overhead-${flight.id}`,
+      overhead: flight,
+      board: null,
+      kind: role,
+      reason,
+      score,
+    })
+  }
+
+  for (const { flight, kind, reason } of interestingBoardFlights(arrivals, departures, overhead, 12)) {
+    const overheadMatch = findOverheadMatch(overhead, flight.flightNumber)
+    const resolvedReason: SpotlightReason = overheadMatch ? 'live' : reason
+    let score = resolvedReason === 'live' ? 96 : resolvedReason === 'heavy' ? 78 : 70
+    if (flight.photoUrl) score += 10
+    if (overheadMatch) score += 14
+
+    upsert({
+      id: `${kind}-${flight.id}`,
+      overhead: overheadMatch,
+      board: flight,
+      kind,
+      reason: resolvedReason,
+      score,
+    })
+  }
+
+  for (const { flight, kind, delayMinutes } of topDelayedBoardFlights(arrivals, departures, 4)) {
+    const overheadMatch = findOverheadMatch(overhead, flight.flightNumber)
+    let score = 62 + Math.min(delayMinutes, 50)
+    if (flight.photoUrl) score += 6
+    if (overheadMatch) score += 10
+
+    upsert({
+      id: `delayed-${kind}-${flight.id}`,
+      overhead: overheadMatch,
+      board: flight,
+      kind,
+      reason: 'delayed',
+      score,
+    })
+  }
+
+  if (items.size < 2) {
+    for (const [kind, flights] of [
+      ['arrival', arrivals] as const,
+      ['departure', departures] as const,
+    ]) {
+      for (const flight of flights) {
+        if (!isActiveBoardFlight(flight, kind, 90)) continue
+        const overheadMatch = findOverheadMatch(overhead, flight.flightNumber)
+        upsert({
+          id: `board-${kind}-${flight.id}`,
+          overhead: overheadMatch,
+          board: flight,
+          kind,
+          reason: overheadMatch ? 'live' : 'overhead',
+          score: 48 + (flight.photoUrl ? 8 : 0),
+        })
+        if (items.size >= limit) break
+      }
+      if (items.size >= limit) break
+    }
+  }
+
+  return [...items.values()].sort((a, b) => b.score - a.score).slice(0, limit)
+}
+
+export function spotlightPairAt(pool: SpotlightFlight[], pairIndex: number): SpotlightFlight[] {
+  if (pool.length === 0) return []
+  if (pool.length === 1) return [pool[0]]
+
+  const pairCount = Math.ceil(pool.length / 2)
+  const index = ((pairIndex % pairCount) + pairCount) % pairCount
+  const first = pool[index * 2]
+  const second = pool[index * 2 + 1] ?? pool[0]
+  if (first.id === second.id) return [first]
+  return [first, second]
+}
+
+function scoreBoardSpotlightCandidate(
+  flight: BoardFlight,
+  kind: BoardKind,
+  overhead: OverheadFlight[],
+): SpotlightFlight {
+  const overheadMatch = findOverheadMatch(overhead, flight.flightNumber)
+  let reason: SpotlightReason = 'overhead'
+  let score = 48
+
+  if (overheadMatch) {
+    reason = 'live'
+    score = 96
+  } else if (isHeavyAircraft(flight.aircraftCode, flight.aircraftModel)) {
+    reason = 'heavy'
+    score = 78
+  } else if (isCargoBoardFlight(flight)) {
+    reason = 'cargo'
+    score = 72
+  }
+
+  const delay = boardDelayInfo(flight, kind)
+  if (delay && (delay.tone === 'warn' || delay.tone === 'danger')) {
+    reason = 'delayed'
+    score = Math.max(score, 64 + (delay.tone === 'danger' ? 8 : 0))
+  }
+
+  if (flight.photoUrl) score += 10
+  if (flight.status === 'estimated' || flight.status === 'delayed') score += 4
+
+  const scheduled = boardScheduledUnix(flight, kind)
+  if (scheduled != null) {
+    const minutesUntil = (scheduled - Math.floor(Date.now() / 1000)) / 60
+    if (minutesUntil >= 0 && minutesUntil <= 90) score += 6
+  }
+
+  return {
+    id: `${kind}-${flight.id}`,
+    overhead: overheadMatch,
+    board: flight,
+    kind,
+    reason,
+    score,
+  }
+}
+
+export function pickBoardSpotlightPair(
+  arrivals: BoardFlight[],
+  departures: BoardFlight[],
+  overhead: OverheadFlight[],
+): BoardSpotlightPair {
+  return rotatingSpotlightPair(buildSpotlightCandidates(arrivals, departures, overhead), 0)
+}
+
+export function buildSpotlightCandidates(
+  arrivals: BoardFlight[],
+  departures: BoardFlight[],
+  overhead: OverheadFlight[],
+  limit = 4,
+): { arrivals: SpotlightFlight[]; departures: SpotlightFlight[] } {
+  const toCandidates = (flights: BoardFlight[], kind: BoardKind) =>
+    flights
+      .filter((flight) => isActiveBoardFlight(flight, kind, 120))
+      .map((flight) => scoreBoardSpotlightCandidate(flight, kind, overhead))
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          (boardScheduledUnix(a.board!, kind) ?? 0) - (boardScheduledUnix(b.board!, kind) ?? 0),
+      )
+      .slice(0, limit)
+
+  return {
+    arrivals: toCandidates(arrivals, 'arrival'),
+    departures: toCandidates(departures, 'departure'),
+  }
+}
+
+export function rotatingSpotlightPair(
+  candidates: { arrivals: SpotlightFlight[]; departures: SpotlightFlight[] },
+  pairIndex: number,
+): BoardSpotlightPair {
+  const { arrivals, departures } = candidates
+  if (arrivals.length === 0 && departures.length === 0) {
+    return { arrival: null, departure: null }
+  }
+
+  const cycles = Math.max(arrivals.length, departures.length, 1)
+  const idx = ((pairIndex % cycles) + cycles) % cycles
+
+  return {
+    arrival: arrivals.length > 0 ? arrivals[idx % arrivals.length] : null,
+    departure: departures.length > 0 ? departures[idx % departures.length] : null,
+  }
 }
 
 /** Kiwi CDN — common IATA airline logos; returns null when code is missing/invalid. */
@@ -45,43 +502,47 @@ export function parseOverheadFlights(entity: HassEntity | undefined): OverheadFl
     const id = asString(row.id) ?? asString(row.aircraft_icao_24bit) ?? asString(row.callsign)
     if (!id) return []
 
-    return [
-      {
-        id,
-        callsign: asString(row.callsign) ?? asString(row.flight_number) ?? id,
-        flightNumber: asString(row.flight_number),
-        airline: asString(row.airline_short) ?? asString(row.airline) ?? 'Unknown',
-        airlineIata: asString(row.airline_iata)?.toUpperCase() ?? null,
-        aircraftModel: asString(row.aircraft_model) ?? asString(row.aircraft_code) ?? '',
-        registration: asString(row.aircraft_registration) ?? '',
-        originCode: asString(row.airport_origin_code_iata),
-        originCity: asString(row.airport_origin_city),
-        destinationCode: asString(row.airport_destination_code_iata),
-        destinationCity: asString(row.airport_destination_city),
-        originTerminal: asString(row.airport_origin_terminal),
-        destinationTerminal: asString(row.airport_destination_terminal),
-        realArrivalUnix: asUnixTime(row.time_real_arrival),
-        realDepartureUnix: asUnixTime(row.time_real_departure),
-        scheduledArrivalUnix: asUnixTime(row.time_scheduled_arrival),
-        scheduledDepartureUnix: asUnixTime(row.time_scheduled_departure),
-        estimatedArrivalUnix: asUnixTime(row.time_estimated_arrival),
-        estimatedDepartureUnix: asUnixTime(row.time_estimated_departure),
-        altitude: asNumber(row.altitude),
-        groundSpeed: asNumber(row.ground_speed),
-        heading: asNumber(row.heading),
-        distance: asNumber(row.distance),
-        verticalSpeed: asNumber(row.vertical_speed),
-        latitude: asNumber(row.latitude),
-        longitude: asNumber(row.longitude),
-        onGround: Number(row.on_ground) === 1 || row.on_ground === true,
-        tracked: row.tracked_by_device != null && row.tracked_by_device !== false && row.tracked_by_device !== '',
-        photoUrl:
-          sanitizePhotoUrl(row.aircraft_photo_medium) ??
-          sanitizePhotoUrl(row.aircraft_photo_small) ??
-          sanitizePhotoUrl(row.aircraft_photo_large),
-      },
-    ]
+    return [parseOverheadRow(row, id)]
   })
+}
+
+function parseOverheadRow(row: Record<string, unknown>, id: string): OverheadFlight {
+  return {
+    id,
+    callsign: asString(row.callsign) ?? asString(row.flight_number) ?? id,
+    flightNumber: asString(row.flight_number),
+    airline: asString(row.airline_short) ?? asString(row.airline) ?? 'Unknown',
+    airlineIata: asString(row.airline_iata)?.toUpperCase() ?? null,
+    aircraftModel: asString(row.aircraft_model) ?? asString(row.aircraft_code) ?? '',
+    aircraftCode: asString(row.aircraft_code)?.toUpperCase() ?? null,
+    registration: asString(row.aircraft_registration) ?? '',
+    originCode: asString(row.airport_origin_code_iata),
+    originCity: asString(row.airport_origin_city),
+    destinationCode: asString(row.airport_destination_code_iata),
+    destinationCity: asString(row.airport_destination_city),
+    originTerminal: asString(row.airport_origin_terminal),
+    destinationTerminal: asString(row.airport_destination_terminal),
+    realArrivalUnix: asUnixTime(row.time_real_arrival),
+    realDepartureUnix: asUnixTime(row.time_real_departure),
+    scheduledArrivalUnix: asUnixTime(row.time_scheduled_arrival),
+    scheduledDepartureUnix: asUnixTime(row.time_scheduled_departure),
+    estimatedArrivalUnix: asUnixTime(row.time_estimated_arrival),
+    estimatedDepartureUnix: asUnixTime(row.time_estimated_departure),
+    altitude: asNumber(row.altitude),
+    groundSpeed: asNumber(row.ground_speed),
+    heading: asNumber(row.heading),
+    // FlightRadar24 reports distance in kilometers.
+    distance: asNumber(row.distance) * 0.621371,
+    verticalSpeed: asNumber(row.vertical_speed),
+    latitude: asNumber(row.latitude),
+    longitude: asNumber(row.longitude),
+    onGround: Number(row.on_ground) === 1 || row.on_ground === true,
+    tracked: row.tracked_by_device != null && row.tracked_by_device !== false && row.tracked_by_device !== '',
+    photoUrl:
+      sanitizePhotoUrl(row.aircraft_photo_medium) ??
+      sanitizePhotoUrl(row.aircraft_photo_small) ??
+      sanitizePhotoUrl(row.aircraft_photo_large),
+  }
 }
 
 export function parseBoardFlights(
@@ -114,6 +575,9 @@ export function parseBoardFlights(
       status,
       statusText: asString(row.status_text) ?? status,
       aircraftModel: asString(row.aircraft_model) ?? asString(row.aircraft_code) ?? '',
+      aircraftCode: asString(row.aircraft_code)?.toUpperCase() ?? null,
+      registration: asString(row.aircraft_registration),
+      photoUrl: boardFlightPhotoFromRow(row),
       scheduledArrivalUnix: asUnixTime(row.time_scheduled_arrival),
       scheduledDepartureUnix: asUnixTime(row.time_scheduled_departure),
       realArrivalUnix: asUnixTime(row.time_real_arrival),
@@ -156,6 +620,39 @@ export function sensorCount(entity: HassEntity | undefined): number | null {
   if (!isEntityAvailable(entity)) return null
   const n = Number(entity?.state)
   return Number.isFinite(n) ? n : null
+}
+
+export function sensorFloat(entity: HassEntity | undefined): number | null {
+  if (!isEntityAvailable(entity)) return null
+  const n = Number(entity?.state)
+  return Number.isFinite(n) ? n : null
+}
+
+export function entityLastUpdated(entity: HassEntity | undefined): Date | null {
+  const raw = entity?.last_updated
+  if (!raw) return null
+  const date = new Date(raw)
+  return Number.isFinite(date.getTime()) ? date : null
+}
+
+export function formatDataFreshness(date: Date | null): string {
+  if (!date) return '—'
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
+  if (seconds < 45) return 'just now'
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
+  return `${Math.floor(seconds / 3600)}h ago`
+}
+
+export function formatDelayIndex(value: number | null): string {
+  if (value === null) return '—'
+  return value.toFixed(1)
+}
+
+export function delayIndexTone(value: number | null): FlightStatTone {
+  if (value === null) return 'neutral'
+  if (value <= 1.2) return 'good'
+  if (value <= 2) return 'warn'
+  return 'danger'
 }
 
 export type { FlightStatTone } from './types'
@@ -315,6 +812,87 @@ export function boardDelayInfo(
   }
 
   return { label: `${deltaMin} min`, tone: 'good' }
+}
+
+/** Positive delay minutes for sorting; null when on time or unknown. */
+export function boardDelayMinutes(flight: BoardFlight, kind: BoardKind): number | null {
+  const scheduled = boardScheduledUnix(flight, kind)
+  const actual = boardActualUnix(flight, kind)
+  if (scheduled == null || actual == null) {
+    return flight.status === 'delayed' ? 1 : null
+  }
+
+  const deltaMin = Math.round((actual - scheduled) / 60)
+  if (deltaMin <= ON_TIME_THRESHOLD_MIN) return null
+  return deltaMin
+}
+
+export function filterOverheadByRole(
+  flights: OverheadFlight[],
+  airportCode: string | null | undefined,
+  role: OverheadAirportRole,
+  limit = 4,
+): OverheadFlight[] {
+  return flights
+    .filter((flight) => overheadAirportRole(flight, airportCode) === role)
+    .slice(0, limit)
+}
+
+export interface DelayedBoardFlight {
+  flight: BoardFlight
+  kind: BoardKind
+  delayMinutes: number
+}
+
+export function topDelayedBoardFlights(
+  arrivals: BoardFlight[],
+  departures: BoardFlight[],
+  limit = 4,
+): DelayedBoardFlight[] {
+  const items: DelayedBoardFlight[] = []
+
+  for (const flight of arrivals) {
+    const delayMinutes = boardDelayMinutes(flight, 'arrival')
+    if (delayMinutes != null && delayMinutes > 0) {
+      items.push({ flight, kind: 'arrival', delayMinutes })
+    }
+  }
+
+  for (const flight of departures) {
+    const delayMinutes = boardDelayMinutes(flight, 'departure')
+    if (delayMinutes != null && delayMinutes > 0) {
+      items.push({ flight, kind: 'departure', delayMinutes })
+    }
+  }
+
+  return items.sort((a, b) => b.delayMinutes - a.delayMinutes).slice(0, limit)
+}
+
+/** Compact time cell: scheduled, or scheduled→estimated when different. */
+export function boardTimeDisplay(flight: BoardFlight, kind: BoardKind): string {
+  const sched = boardScheduledTime(flight, kind)
+  const est = boardActualTime(flight, kind)
+  if (!sched) return est ?? '—'
+  if (!est) return sched
+  return `${sched}→${est}`
+}
+
+/** Short status when delay badge is not shown. */
+export function boardStatusShort(flight: BoardFlight, kind: BoardKind): string | null {
+  if (boardDelayInfo(flight, kind)) return null
+
+  switch (flight.status) {
+    case 'landed':
+      return 'Landed'
+    case 'estimated':
+      return 'Est'
+    case 'scheduled':
+      return 'Sched'
+    case 'delayed':
+      return 'Delayed'
+    default:
+      return null
+  }
 }
 
 export function boardStatusDisplay(flight: BoardFlight, kind: BoardKind): string {
@@ -585,26 +1163,20 @@ export function computeRadarView(
     }
   }
 
-  const latitude =
-    positioned.reduce((sum, flight) => sum + flight.latitude, center.latitude) /
-    (positioned.length + 1)
-  const longitude =
-    positioned.reduce((sum, flight) => sum + flight.longitude, center.longitude) /
-    (positioned.length + 1)
-
+  // Keep the viewport anchored on the configured center so aircraft move across the map
+  // instead of the map re-centering on every position update.
   const distances = positioned.map((flight) =>
-    distanceMiles(latitude, longitude, flight.latitude, flight.longitude),
+    distanceMiles(center.latitude, center.longitude, flight.latitude, flight.longitude),
   )
-  distances.push(distanceMiles(latitude, longitude, center.latitude, center.longitude))
 
   const spanMiles = Math.max(...distances, 2)
-  const radiusMiles = clamp(spanMiles * 1.35 + 1.5, 4, 18)
+  const radiusMiles = clamp(Math.max(spanMiles * 1.35 + 1.5, fallbackRadius), fallbackRadius, 18)
 
   return {
-    latitude,
-    longitude,
+    latitude: center.latitude,
+    longitude: center.longitude,
     radiusMiles,
-    zoom: zoomForRadiusMiles(radiusMiles, latitude, mapSize),
+    zoom: zoomForRadiusMiles(radiusMiles, center.latitude, mapSize),
   }
 }
 

@@ -9,6 +9,8 @@ Custom wall tablet and TV display for Home Assistant. Client-only SPA served by 
 | `#/kiosk` | Wall tablet glanceable dashboard |
 | `#/tv` | Living room TV ambient display |
 | `#/master-bedroom` | Master bedroom — Google Home / Nest Hub touch control |
+| `#/playroom` | Playroom — animated clock, light controls, ambient settle mode |
+| `#/evening` | Evening wind-down board for Nest Hub (9–10 PM) |
 
 ## Quick start
 
@@ -88,7 +90,18 @@ All four are optional for CI to pass: without them, the workflow builds with pla
 
 - Fully Kiosk: `http://<kiosk-host>/#/kiosk`
 - Android TV: `http://<kiosk-host>/#/tv`
-- Google Home / Nest Hub: `http://<kiosk-host>/#/master-bedroom`
+- Google Home / Nest Hub: `http://<kiosk-host>/#/master-bedroom` or `/#/evening`
+- Playroom tablet: `http://<kiosk-host>/#/playroom` (enters ambient settle mode after ~2 min idle; tap to wake)
+
+### Playroom settle mode
+
+The playroom display includes a long-running ambient mode for wall tablets:
+
+- Subtle drifting background orbs, stars, and shimmer (always on)
+- After `playroom.settle.idleSeconds` of no touch (default 120s), controls soften and the clock becomes the focus
+- A bottom spotlight bar rotates kid-friendly greetings, facts, and RSS headlines
+- Configure feeds/facts in `entities.json` under `playroom.settle`
+- For RSS without a public proxy, set `VITE_RSS_PROXY` to a same-origin feed proxy URL at build time
 
 ### HA CORS
 

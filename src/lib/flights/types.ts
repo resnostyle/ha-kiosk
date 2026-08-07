@@ -5,6 +5,7 @@ export interface OverheadFlight {
   airline: string
   airlineIata: string | null
   aircraftModel: string
+  aircraftCode: string | null
   registration: string
   originCode: string | null
   originCity: string | null
@@ -40,6 +41,9 @@ export interface BoardFlight {
   status: string
   statusText: string
   aircraftModel: string
+  aircraftCode: string | null
+  registration: string | null
+  photoUrl: string | null
   scheduledArrivalUnix: number | null
   scheduledDepartureUnix: number | null
   realArrivalUnix: number | null
@@ -79,4 +83,43 @@ export interface FlightStatGroup {
   title: string
   symbol: string
   stats: FlightStatItem[]
+}
+
+export interface FlightOpsItem {
+  id: string
+  label: string
+  value: string
+  tone?: FlightStatTone
+}
+
+export type InterestingFlightReason = 'heavy' | 'cargo' | 'live'
+
+export type AircraftManufacturer = 'airbus' | 'boeing' | 'embraer' | 'mitsubishi' | 'bombardier' | 'other'
+
+export interface AircraftManufacturerCounts {
+  airbus: number
+  boeing: number
+  other: number
+}
+
+export interface InterestingBoardFlight {
+  flight: BoardFlight
+  kind: BoardKind
+  reason: InterestingFlightReason
+}
+
+export type SpotlightReason = InterestingFlightReason | 'overhead' | 'delayed'
+
+export interface SpotlightFlight {
+  id: string
+  overhead: OverheadFlight | null
+  board: BoardFlight | null
+  kind: BoardKind | null
+  reason: SpotlightReason
+  score: number
+}
+
+export interface BoardSpotlightPair {
+  arrival: SpotlightFlight | null
+  departure: SpotlightFlight | null
 }

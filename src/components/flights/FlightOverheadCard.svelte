@@ -12,6 +12,7 @@
     routeLabel,
   } from '../../lib/flights/utils'
   import AirlineMark from './AirlineMark.svelte'
+  import AircraftManufacturerTag from './AircraftManufacturerTag.svelte'
 
   interface Props {
     flight: OverheadFlight
@@ -59,13 +60,18 @@
     <div class="flight-overhead-head">
       <h3 class="flight-overhead-title">{title}</h3>
       <div class="flight-overhead-badges">
+        <AircraftManufacturerTag
+          aircraftCode={flight.aircraftCode}
+          aircraftModel={flight.aircraftModel}
+          majorOnly
+        />
         {#if airportRole && airportRoleLabel}
           <span class={airportRoleBadgeClass}>{airportRoleLabel}</span>
         {/if}
         {#if delayInfo}
           <span class={flightStatToneToBadgeClass(delayInfo.tone)}>{delayInfo.label}</span>
         {/if}
-        {#if flight.tracked}
+        {#if flight.tracked && !compact}
           <span class="badge badge--accent">Tracked</span>
         {/if}
       </div>
@@ -77,14 +83,14 @@
       class="flight-overhead-airline"
       name={flight.airline}
       iata={flight.airlineIata}
-      suffix={aircraftSuffix}
+      suffix={compact ? '' : aircraftSuffix}
     />
 
-    {#if scheduleLine}
+    {#if scheduleLine && !compact}
       <p class="flight-overhead-schedule">{scheduleLine}</p>
     {/if}
 
-    {#if groundDetail}
+    {#if groundDetail && !compact}
       <p class="flight-overhead-ground">{groundDetail}</p>
     {/if}
   </div>
@@ -139,10 +145,13 @@
   }
 
   .flight-overhead-card--compact {
-    border-radius: 0.65rem;
+    border-radius: 0.45rem;
     background: var(--color-surface-overlay);
     border: none;
-    border-left: 3px solid transparent;
+    border-left: 2px solid transparent;
+    gap: 0.35rem 0.45rem;
+    padding: 0.3rem 0.4rem;
+    grid-template-columns: 2.5rem minmax(0, 1fr) auto;
   }
 
   .flight-overhead-card[data-airport-role='arrival'] {
@@ -161,6 +170,12 @@
 
   .flight-overhead-card--panel[data-airport-role='departure'] {
     background: color-mix(in srgb, var(--color-warning) 6%, var(--color-surface-raised));
+  }
+
+  .flight-overhead-card--compact .flight-overhead-thumb {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.35rem;
   }
 
   .flight-overhead-thumb {
@@ -204,9 +219,13 @@
 
   .flight-overhead-title {
     margin: 0;
-    font-size: 1rem;
+    font-size: 0.875rem;
     font-weight: 700;
-    line-height: 1.2;
+    line-height: 1.15;
+  }
+
+  .flight-overhead-card--compact .flight-overhead-title {
+    font-size: 0.8125rem;
   }
 
   .flight-overhead-badges {
@@ -218,15 +237,23 @@
 
   .flight-overhead-route {
     margin: 0;
-    font-size: 0.875rem;
+    font-size: 0.75rem;
     font-weight: 600;
-    line-height: 1.25;
+    line-height: 1.2;
+  }
+
+  .flight-overhead-card--compact .flight-overhead-route {
+    font-size: 0.6875rem;
   }
 
   .flight-overhead-card :global(.flight-overhead-airline.airline-mark) {
     margin: 0;
-    font-size: 0.75rem;
-    line-height: 1.3;
+    font-size: 0.6875rem;
+    line-height: 1.2;
+  }
+
+  .flight-overhead-card--compact :global(.flight-overhead-airline.airline-mark) {
+    font-size: 0.625rem;
   }
 
   .flight-overhead-card :global(.flight-overhead-airline .airline-mark-logo) {
@@ -253,11 +280,16 @@
   .flight-overhead-stats {
     grid-area: stats;
     display: grid;
-    grid-template-columns: repeat(2, minmax(3.5rem, max-content));
-    gap: 0.35rem 1rem;
+    grid-template-columns: repeat(2, minmax(2.75rem, max-content));
+    gap: 0.2rem 0.65rem;
     margin: 0;
     align-self: center;
     justify-self: end;
+  }
+
+  .flight-overhead-card--compact .flight-overhead-stats {
+    grid-template-columns: repeat(2, minmax(2.5rem, max-content));
+    gap: 0.15rem 0.5rem;
   }
 
   .flight-overhead-stats--vs {
@@ -270,17 +302,21 @@
 
   .flight-overhead-stats dt {
     margin: 0;
-    font-size: 0.625rem;
+    font-size: 0.5625rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--color-text-muted);
   }
 
   .flight-overhead-stats dd {
-    margin: 0.1rem 0 0;
-    font-size: 0.8125rem;
+    margin: 0.05rem 0 0;
+    font-size: 0.75rem;
     font-weight: 600;
     white-space: nowrap;
+  }
+
+  .flight-overhead-card--compact .flight-overhead-stats dd {
+    font-size: 0.6875rem;
   }
 
   @media (max-width: 900px) {
