@@ -129,6 +129,12 @@
     "departuresDelayed": "sensor.flightradar24_airport_departures_delayed",
     "arrivalsDelayAverage": "sensor.flightradar24_airport_arrivals_delay_average",
     "departuresDelayAverage": "sensor.flightradar24_airport_departures_delay_average",
+    "arrivalsOnTime": "sensor.flightradar24_airport_arrivals_on_time",
+    "departuresOnTime": "sensor.flightradar24_airport_departures_on_time",
+    "arrivalsCanceled": "sensor.flightradar24_airport_arrivals_canceled",
+    "departuresCanceled": "sensor.flightradar24_airport_departures_canceled",
+    "arrivalsDelayIndex": "sensor.flightradar24_airport_arrivals_delay_index",
+    "departuresDelayIndex": "sensor.flightradar24_airport_departures_delay_index",
     "enteredArea": "sensor.flightradar24_entered_area",
     "exitedArea": "sensor.flightradar24_exited_area",
     "mapCenter": {

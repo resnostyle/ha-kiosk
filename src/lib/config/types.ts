@@ -82,6 +82,12 @@ export interface FlightTrackerConfig {
   departuresDelayed: string
   arrivalsDelayAverage: string
   departuresDelayAverage: string
+  arrivalsOnTime?: string
+  departuresOnTime?: string
+  arrivalsCanceled?: string
+  departuresCanceled?: string
+  arrivalsDelayIndex?: string
+  departuresDelayIndex?: string
   enteredArea?: string
   exitedArea?: string
   mapCenter?: FlightMapCenter
@@ -144,6 +150,12 @@ export function allEntityIds(config: EntityConfig = entityConfig): string[] {
     config.flightTracker.departuresDelayed,
     config.flightTracker.arrivalsDelayAverage,
     config.flightTracker.departuresDelayAverage,
+    ...(config.flightTracker.arrivalsOnTime ? [config.flightTracker.arrivalsOnTime] : []),
+    ...(config.flightTracker.departuresOnTime ? [config.flightTracker.departuresOnTime] : []),
+    ...(config.flightTracker.arrivalsCanceled ? [config.flightTracker.arrivalsCanceled] : []),
+    ...(config.flightTracker.departuresCanceled ? [config.flightTracker.departuresCanceled] : []),
+    ...(config.flightTracker.arrivalsDelayIndex ? [config.flightTracker.arrivalsDelayIndex] : []),
+    ...(config.flightTracker.departuresDelayIndex ? [config.flightTracker.departuresDelayIndex] : []),
     ...(config.flightTracker.enteredArea ? [config.flightTracker.enteredArea] : []),
     ...(config.flightTracker.exitedArea ? [config.flightTracker.exitedArea] : []),
   ])

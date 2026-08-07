@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { BoardFlight, BoardKind, OverheadFlight } from '../../lib/flights/types'
+  import type { BoardFlight, BoardKind, InterestingBoardFlight, OverheadFlight } from '../../lib/flights/types'
   import type { DelayedBoardFlight } from '../../lib/flights/utils'
   import FlightBoardHighlight from './FlightBoardHighlight.svelte'
   import FlightOverheadCard from './FlightOverheadCard.svelte'
@@ -16,6 +16,7 @@
     emptyText: string
     boardFlights?: BoardCarouselFlight[]
     delayedFlights?: DelayedBoardFlight[]
+    interestingFlights?: InterestingBoardFlight[]
     overheadFlights?: OverheadFlight[]
   }
 
@@ -122,6 +123,25 @@
                   {#each slide.overheadFlights as flight (flight.id)}
                     <div class="flight-carousel-item">
                       <FlightOverheadCard {flight} {airportCode} compact />
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            {:else if slide.interestingFlights}
+              {#if slide.interestingFlights.length === 0}
+                <p class="flight-carousel-empty">{slide.emptyText}</p>
+              {:else}
+                <div class="flight-carousel-list">
+                  {#each slide.interestingFlights as entry (entry.flight.id + entry.kind)}
+                    <div
+                      class="flight-carousel-item"
+                      class:flight-item-fresh={isFresh(entry.flight.id)}
+                    >
+                      <FlightBoardHighlight
+                        flight={entry.flight}
+                        kind={entry.kind}
+                        reason={entry.reason}
+                      />
                     </div>
                   {/each}
                 </div>

@@ -2,7 +2,7 @@
   interface Props {
     src?: string | null
     label?: string
-    size?: 'sm' | 'md' | 'lg'
+    size?: 'sm' | 'md' | 'lg' | 'xl'
     class?: string
   }
 
@@ -52,6 +52,12 @@
     border-radius: 0.4rem;
   }
 
+  .aircraft-thumb--xl {
+    width: 5.25rem;
+    height: 3.25rem;
+    border-radius: 0.45rem;
+  }
+
   .aircraft-thumb img {
     width: 100%;
     height: 100%;
@@ -67,5 +73,9 @@
 
   .aircraft-thumb--lg .aircraft-thumb-fallback {
     font-size: 1rem;
+  }
+
+  .aircraft-thumb--xl .aircraft-thumb-fallback {
+    font-size: 1.35rem;
   }
 </style>

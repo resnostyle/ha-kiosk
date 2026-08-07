@@ -12,6 +12,7 @@
     routeLabel,
   } from '../../lib/flights/utils'
   import AirlineMark from './AirlineMark.svelte'
+  import AircraftManufacturerTag from './AircraftManufacturerTag.svelte'
 
   interface Props {
     flight: OverheadFlight
@@ -59,6 +60,11 @@
     <div class="flight-overhead-head">
       <h3 class="flight-overhead-title">{title}</h3>
       <div class="flight-overhead-badges">
+        <AircraftManufacturerTag
+          aircraftCode={flight.aircraftCode}
+          aircraftModel={flight.aircraftModel}
+          majorOnly
+        />
         {#if airportRole && airportRoleLabel}
           <span class={airportRoleBadgeClass}>{airportRoleLabel}</span>
         {/if}

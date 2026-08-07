@@ -1,21 +1,25 @@
 <script lang="ts">
-  import type { BoardFlight, BoardKind } from '../../lib/flights/types'
+  import type { BoardFlight, BoardKind, InterestingFlightReason } from '../../lib/flights/types'
   import {
     airlineLogoUrl,
     boardDelayInfo,
     boardTimeDisplay,
     flightStatToneToBadgeClass,
+    interestingFlightReasonLabel,
     isActiveBoardFlight,
   } from '../../lib/flights/utils'
+  import AircraftManufacturerTag from './AircraftManufacturerTag.svelte'
   import AircraftThumb from './AircraftThumb.svelte'
 
   interface Props {
     flight: BoardFlight
     kind: BoardKind
     delayMinutes?: number | null
+    reason?: InterestingFlightReason | null
+    size?: 'default' | 'large'
   }
 
-  let { flight, kind, delayMinutes = null }: Props = $props()
+  let { flight, kind, delayMinutes = null, reason = null, size = 'default' }: Props = $props()
 
   const delay = $derived(boardDelayInfo(flight, kind))
   const active = $derived(isActiveBoardFlight(flight, kind))
@@ -33,12 +37,24 @@
   })
 </script>
 
-<article class="flight-board-highlight" class:active data-kind={kind}>
-  <AircraftThumb src={flight.photoUrl} label={flight.aircraftModel || flight.flightNumber} size="lg" />
+<article class="flight-board-highlight" class:flight-board-highlight--large={size === 'large'} class:active data-kind={kind}>
+  <AircraftThumb
+    src={flight.photoUrl}
+    label={flight.aircraftModel || flight.flightNumber}
+    size={size === 'large' ? 'xl' : 'lg'}
+  />
 
   <div class="highlight-body">
     <div class="highlight-head">
       <span class="highlight-role">{roleLabel}</span>
+      {#if reason}
+        <span class="highlight-tag" data-reason={reason}>{interestingFlightReasonLabel(reason)}</span>
+      {/if}
+      <AircraftManufacturerTag
+        aircraftCode={flight.aircraftCode}
+        aircraftModel={flight.aircraftModel}
+        majorOnly
+      />
       <span class="highlight-flight">{flight.flightNumber}</span>
       <span class="highlight-airport">{flight.airportCode}</span>
     </div>
@@ -125,6 +141,33 @@
     flex-shrink: 0;
   }
 
+  .highlight-tag {
+    font-size: 0.4375rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.08rem 0.28rem;
+    border-radius: 0.2rem;
+    flex-shrink: 0;
+    background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+    color: var(--color-accent);
+  }
+
+  .highlight-tag[data-reason='heavy'] {
+    background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+    color: var(--color-warning);
+  }
+
+  .highlight-tag[data-reason='cargo'] {
+    background: color-mix(in srgb, var(--color-text-muted) 20%, transparent);
+    color: var(--color-text-muted);
+  }
+
+  .highlight-tag[data-reason='live'] {
+    background: color-mix(in srgb, var(--color-success) 18%, transparent);
+    color: var(--color-success);
+  }
+
   .highlight-flight {
     font-size: 0.8125rem;
     font-weight: 700;
@@ -209,5 +252,67 @@
   .highlight-side :global(.badge) {
     font-size: 0.5rem;
     padding: 0.08rem 0.3rem;
+  }
+
+  .flight-board-highlight--large {
+    gap: 0.5rem 0.65rem;
+    padding: 0.5rem 0.6rem;
+    border-radius: 0.6rem;
+  }
+
+  .flight-board-highlight--large .highlight-body {
+    gap: 0.2rem;
+  }
+
+  .flight-board-highlight--large .highlight-head {
+    gap: 0.4rem;
+  }
+
+  .flight-board-highlight--large .highlight-role {
+    font-size: 0.5625rem;
+  }
+
+  .flight-board-highlight--large .highlight-tag {
+    font-size: 0.5rem;
+    padding: 0.1rem 0.32rem;
+  }
+
+  .flight-board-highlight--large .highlight-flight {
+    font-size: 1.0625rem;
+  }
+
+  .flight-board-highlight--large .highlight-airport {
+    font-size: 0.9375rem;
+  }
+
+  .flight-board-highlight--large .highlight-logo,
+  .flight-board-highlight--large .highlight-logo-fallback {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  .flight-board-highlight--large .highlight-logo-fallback {
+    font-size: 0.5rem;
+  }
+
+  .flight-board-highlight--large .highlight-aircraft {
+    font-size: 0.6875rem;
+  }
+
+  .flight-board-highlight--large .highlight-delay {
+    font-size: 1rem;
+  }
+
+  .flight-board-highlight--large .highlight-time {
+    font-size: 0.9375rem;
+  }
+
+  .flight-board-highlight--large .highlight-side {
+    gap: 0.12rem;
+  }
+
+  .flight-board-highlight--large .highlight-side :global(.badge) {
+    font-size: 0.5625rem;
+    padding: 0.1rem 0.35rem;
   }
 </style>

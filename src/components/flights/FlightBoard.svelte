@@ -8,9 +8,11 @@
     boardStatusShort,
     boardTimeDisplay,
     flightStatToneToBadgeClass,
+    formatAircraftLabel,
     isActiveBoardFlight,
     statusClass,
   } from '../../lib/flights/utils'
+  import AircraftManufacturerTag from './AircraftManufacturerTag.svelte'
   import AircraftThumb from './AircraftThumb.svelte'
   import AnimatedFlightValue from './AnimatedFlightValue.svelte'
 
@@ -96,13 +98,15 @@
       </div>
 
       <ul class="flight-board-list">
-        {#each flights as flight (flight.id)}
+        {#each flights as flight, flightIndex (flight.id)}
           {@const delay = boardDelayInfo(flight, kind)}
           {@const statusShort = boardStatusShort(flight, kind)}
           {@const active = isActiveBoardFlight(flight, kind)}
+          {@const lead = flightIndex < 2}
           <li
             class="flight-board-row"
             class:flight-board-row--active={active}
+            class:flight-board-row--lead={lead}
             class:flight-item-fresh={isFresh(flight.id)}
             data-kind={kind}
             role="row"
@@ -111,14 +115,26 @@
             out:fade={{ duration: 140 }}
           >
             <div class="flight-board-col-thumb" role="cell">
-              {#if active}
-                <AircraftThumb src={flight.photoUrl} label={flight.flightNumber} size="sm" />
+              {#if lead || active}
+                <AircraftThumb
+                  src={flight.photoUrl}
+                  label={flight.flightNumber}
+                  size={lead ? 'lg' : 'sm'}
+                />
               {/if}
             </div>
 
             <div class="flight-board-col-flight" role="cell">
-              <span class="flight-board-flight">{flight.flightNumber}</span>
+              <div class="flight-board-flight-line">
+                <span class="flight-board-flight">{flight.flightNumber}</span>
+                <AircraftManufacturerTag
+                  aircraftCode={flight.aircraftCode}
+                  aircraftModel={flight.aircraftModel}
+                  majorOnly
+                />
+              </div>
               <span class="flight-board-carrier">{airlineLabel(flight)}</span>
+              <span class="flight-board-aircraft">{formatAircraftLabel(flight)}</span>
             </div>
 
             <div class="flight-board-col-route" role="cell">
@@ -301,14 +317,75 @@
     border-bottom: 1px solid color-mix(in srgb, var(--color-border) 45%, transparent);
   }
 
+  .flight-board-row--lead {
+    grid-template-columns: 3.75rem minmax(4.5rem, 1.2fr) 2.5rem minmax(4.5rem, 1fr) minmax(3.25rem, auto);
+    gap: 0.35rem 0.45rem;
+    padding: 0.4rem 0.2rem;
+    border-bottom-color: color-mix(in srgb, var(--color-border) 70%, transparent);
+  }
+
+  .flight-board-row--lead.flight-board-row--active[data-kind='arrival'] {
+    background: color-mix(in srgb, var(--color-success) 11%, transparent);
+  }
+
+  .flight-board-row--lead.flight-board-row--active[data-kind='departure'] {
+    background: color-mix(in srgb, var(--color-warning) 11%, transparent);
+  }
+
+  .flight-board-row--lead .flight-board-col-thumb {
+    width: auto;
+  }
+
+  .flight-board-row--lead .flight-board-flight {
+    font-size: 0.9375rem;
+  }
+
+  .flight-board-row--lead .flight-board-carrier {
+    font-size: 0.6875rem;
+  }
+
+  .flight-board-row--lead .flight-board-aircraft {
+    font-size: 0.625rem;
+  }
+
+  .flight-board-row--lead .flight-board-airport {
+    font-size: 0.8125rem;
+  }
+
+  .flight-board-row--lead .flight-board-col-time {
+    font-size: 0.8125rem;
+    font-weight: 700;
+  }
+
+  .flight-board-row--lead .flight-board-status {
+    font-size: 0.625rem;
+  }
+
+  .flight-board-row--lead :global(.badge) {
+    font-size: 0.625rem;
+    padding: 0.12rem 0.4rem;
+  }
+
+  .flight-board-row--lead :global(.aircraft-mfr-tag) {
+    font-size: 0.5625rem;
+  }
+
   .flight-board-row:last-child {
     border-bottom: none;
   }
 
   .flight-board-col-flight {
     display: flex;
-    align-items: baseline;
-    gap: 0.3rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.04rem;
+    min-width: 0;
+  }
+
+  .flight-board-flight-line {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
     min-width: 0;
   }
 
@@ -327,8 +404,19 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    max-width: 100%;
   }
 
+  .flight-board-aircraft {
+    font-size: 0.5rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--color-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
   .flight-board-airport {
     font-weight: 600;
     font-size: 0.6875rem;

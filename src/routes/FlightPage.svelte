@@ -3,26 +3,31 @@
   import ClockHeader from '../components/ClockHeader.svelte'
   import FlightBoard from '../components/flights/FlightBoard.svelte'
   import FlightMap from '../components/flights/FlightMap.svelte'
-  import FlightCarousel, {
-    type FlightCarouselSlide,
-  } from '../components/flights/OverheadCarousel.svelte'
+  import FlightLiveCarousel from '../components/flights/FlightLiveCarousel.svelte'
+  import FlightOpsStrip from '../components/flights/FlightOpsStrip.svelte'
   import FlightStats from '../components/flights/FlightStats.svelte'
   import { entityConfig } from '../lib/config/types'
+  import type { FlightOpsItem, FlightStatGroup, FlightStatItem } from '../lib/flights/types'
   import {
     delayCountTone,
+    delayIndexTone,
     delayMinutesTone,
+    entityLastUpdated,
+    formatDataFreshness,
+    formatDelayIndex,
     overheadTone,
     countBoardFlightsByAirline,
+    countAirbusBoeingFlights,
     enrichBoardFlightsFromOverhead,
+    formatAirbusBoeingMix,
     parseBoardFlights,
     parseOverheadFlights,
     sensorCount,
+    sensorFloat,
     sortBoardFlights,
     sortOverheadByAirportRole,
     statDisplayValue,
-    topDelayedBoardFlights,
   } from '../lib/flights/utils'
-  import type { FlightStatGroup, FlightStatItem } from '../lib/flights/types'
   import { createFreshIdTracker } from '../lib/flights/freshIds.svelte'
   import { useEntityStore } from '../lib/ha/useEntityStore.svelte'
   import { isEntityAvailable } from '../lib/ha/utils'
@@ -68,51 +73,7 @@
   const departures = $derived(departuresAll.slice(0, 24))
   const arrivalAirlines = $derived(countBoardFlightsByAirline(arrivalsAll))
   const departureAirlines = $derived(countBoardFlightsByAirline(departuresAll))
-
-  const carouselSlides = $derived.by((): FlightCarouselSlide[] => {
-    const hub = airportCode === '—' ? 'airport' : airportCode
-    const slides: FlightCarouselSlide[] = []
-
-    if (overhead.length > 0) {
-      slides.push({
-        id: 'overhead',
-        title: `Overhead · ${overhead.length}`,
-        symbol: '◎',
-        emptyText: 'No aircraft overhead',
-        overheadFlights: overhead.slice(0, 6),
-      })
-    }
-
-    slides.push(
-      {
-        id: 'departures',
-        title: `Departing ${hub}`,
-        symbol: '↑',
-        emptyText: 'No upcoming departures',
-        boardFlights: departuresAll
-          .slice(0, 6)
-          .map((flight) => ({ flight, kind: 'departure' as const })),
-      },
-      {
-        id: 'arrivals',
-        title: `Arriving ${hub}`,
-        symbol: '↓',
-        emptyText: 'No upcoming arrivals',
-        boardFlights: arrivalsAll
-          .slice(0, 6)
-          .map((flight) => ({ flight, kind: 'arrival' as const })),
-      },
-      {
-        id: 'delayed',
-        title: 'Most delayed',
-        symbol: '⏱',
-        emptyText: 'No delayed flights right now',
-        delayedFlights: topDelayedBoardFlights(arrivalsAll, departuresAll, 6),
-      },
-    )
-
-    return slides
-  })
+  const manufacturerCounts = $derived(countAirbusBoeingFlights(arrivalsAll, departuresAll))
 
   const carouselLive = $derived(
     overheadLive ||
@@ -146,10 +107,6 @@
   )
 
   const statGroups = $derived.by((): FlightStatGroup[] => {
-    const arrDelayed = sensorCount(store.entity(ft.arrivalsDelayed))
-    const depDelayed = sensorCount(store.entity(ft.departuresDelayed))
-    const arrAvg = sensorCount(store.entity(ft.arrivalsDelayAverage))
-    const depAvg = sensorCount(store.entity(ft.departuresDelayAverage))
     const entered = ft.enteredArea ? sensorCount(store.entity(ft.enteredArea)) : null
 
     const areaStats: FlightStatItem[] = [
@@ -172,53 +129,103 @@
 
     return [
       {
-        id: 'area',
-        title: 'Area',
-        symbol: '✈',
+        id: 'live',
+        title: 'Live',
+        symbol: '◎',
         stats: areaStats,
-      },
-      {
-        id: 'arrivals',
-        title: 'Arrivals',
-        symbol: '↓',
-        stats: [
-          {
-            id: 'arr-delayed',
-            label: 'Arr delayed',
-            value: statDisplayValue(arrDelayed),
-            tone: delayCountTone(arrDelayed),
-          },
-          {
-            id: 'arr-avg',
-            label: 'Arr avg',
-            value: statDisplayValue(arrAvg),
-            unit: 'min',
-            tone: delayMinutesTone(arrAvg),
-          },
-        ],
-      },
-      {
-        id: 'departures',
-        title: 'Departures',
-        symbol: '↑',
-        stats: [
-          {
-            id: 'dep-delayed',
-            label: 'Dep delayed',
-            value: statDisplayValue(depDelayed),
-            tone: delayCountTone(depDelayed),
-          },
-          {
-            id: 'dep-avg',
-            label: 'Dep avg',
-            value: statDisplayValue(depAvg),
-            unit: 'min',
-            tone: delayMinutesTone(depAvg),
-          },
-        ],
       },
     ]
   })
+
+  const opsItems = $derived.by((): FlightOpsItem[] => {
+    const arrDelayed = sensorCount(store.entity(ft.arrivalsDelayed))
+    const depDelayed = sensorCount(store.entity(ft.departuresDelayed))
+    const arrAvg = sensorCount(store.entity(ft.arrivalsDelayAverage))
+    const depAvg = sensorCount(store.entity(ft.departuresDelayAverage))
+    const arrOnTime = ft.arrivalsOnTime ? sensorCount(store.entity(ft.arrivalsOnTime)) : null
+    const depOnTime = ft.departuresOnTime ? sensorCount(store.entity(ft.departuresOnTime)) : null
+    const arrCanceled = ft.arrivalsCanceled ? sensorCount(store.entity(ft.arrivalsCanceled)) : null
+    const depCanceled = ft.departuresCanceled ? sensorCount(store.entity(ft.departuresCanceled)) : null
+    const arrIndex = ft.arrivalsDelayIndex ? sensorFloat(store.entity(ft.arrivalsDelayIndex)) : null
+    const depIndex = ft.departuresDelayIndex ? sensorFloat(store.entity(ft.departuresDelayIndex)) : null
+
+    const items: FlightOpsItem[] = [
+      {
+        id: 'oem-mix',
+        label: 'Airbus / Boeing',
+        value: formatAirbusBoeingMix(manufacturerCounts),
+        tone: 'accent',
+      },
+      {
+        id: 'arr-index',
+        label: 'Arr index',
+        value: formatDelayIndex(arrIndex),
+        tone: delayIndexTone(arrIndex),
+      },
+      {
+        id: 'dep-index',
+        label: 'Dep index',
+        value: formatDelayIndex(depIndex),
+        tone: delayIndexTone(depIndex),
+      },
+      {
+        id: 'arr-delayed',
+        label: 'Arr delayed',
+        value: String(statDisplayValue(arrDelayed)),
+        tone: delayCountTone(arrDelayed),
+      },
+      {
+        id: 'dep-delayed',
+        label: 'Dep delayed',
+        value: String(statDisplayValue(depDelayed)),
+        tone: delayCountTone(depDelayed),
+      },
+      {
+        id: 'arr-avg',
+        label: 'Arr avg',
+        value: arrAvg == null ? '—' : `${arrAvg}m`,
+        tone: delayMinutesTone(arrAvg),
+      },
+      {
+        id: 'dep-avg',
+        label: 'Dep avg',
+        value: depAvg == null ? '—' : `${depAvg}m`,
+        tone: delayMinutesTone(depAvg),
+      },
+    ]
+
+    if (ft.arrivalsOnTime || ft.departuresOnTime) {
+      items.push({
+        id: 'on-time',
+        label: 'On time',
+        value:
+          arrOnTime != null && depOnTime != null
+            ? `${arrOnTime}/${depOnTime}`
+            : String(statDisplayValue(arrOnTime ?? depOnTime)),
+        tone: 'good',
+      })
+    }
+
+    if (ft.arrivalsCanceled || ft.departuresCanceled) {
+      const canceledTotal = (arrCanceled ?? 0) + (depCanceled ?? 0)
+      const hasData = arrCanceled != null || depCanceled != null
+      items.push({
+        id: 'canceled',
+        label: 'Canceled',
+        value: hasData ? String(canceledTotal) : '—',
+        tone: canceledTotal > 0 ? 'danger' : 'good',
+      })
+    }
+
+    return items
+  })
+
+  const opsUpdated = $derived(
+    formatDataFreshness(
+      entityLastUpdated(store.entity(ft.airportArrivals)) ??
+        entityLastUpdated(store.entity(ft.airportDepartures)),
+    ),
+  )
 </script>
 
 <div class="flight-page">
@@ -232,42 +239,64 @@
     <ClockHeader compact />
   </header>
 
-  <section class="flight-radar">
-    <div class="flight-radar-map">
-      <FlightMap flights={overhead} center={mapCenter} layout="sidebar" {airportCode} />
-    </div>
+  <FlightOpsStrip items={opsItems} updated={opsUpdated} />
 
-    <aside class="flight-radar-overhead panel">
-      <FlightCarousel
-        slides={carouselSlides}
-        live={carouselLive}
-        {airportCode}
-        isFresh={(id) =>
-          arrivalsFresh.freshIds.has(id) || departuresFresh.freshIds.has(id)}
-      />
-    </aside>
+  <section class="flight-live" aria-labelledby="flight-live-heading">
+    <h2 id="flight-live-heading" class="flight-section-heading">
+      <span class="flight-section-symbol" aria-hidden="true">◎</span>
+      Live
+      {#if overheadLive}
+        <span class="flight-live-dot" aria-hidden="true"></span>
+      {/if}
+    </h2>
+
+    <div class="flight-radar">
+      <aside class="flight-radar-overhead panel">
+        <FlightLiveCarousel
+          arrivals={arrivalsAll}
+          departures={departuresAll}
+          {overhead}
+          {airportCode}
+          live={carouselLive}
+          {overheadLive}
+          isFresh={(id) =>
+            arrivalsFresh.freshIds.has(id) || departuresFresh.freshIds.has(id)}
+        />
+      </aside>
+
+      <div class="flight-radar-map">
+        <FlightMap flights={overhead} center={mapCenter} layout="sidebar" {airportCode} />
+      </div>
+    </div>
   </section>
 
-  <div class="flight-boards">
-    <FlightBoard
-      title="Arrivals"
-      kind="arrival"
-      flights={arrivals}
-      totalFlights={arrivalsAll.length}
-      airlineCounts={arrivalAirlines}
-      isFresh={(id) => arrivalsFresh.freshIds.has(id)}
-      emptyText="No upcoming arrivals"
-    />
-    <FlightBoard
-      title="Departures"
-      kind="departure"
-      flights={departures}
-      totalFlights={departuresAll.length}
-      airlineCounts={departureAirlines}
-      isFresh={(id) => departuresFresh.freshIds.has(id)}
-      emptyText="No upcoming departures"
-    />
-  </div>
+  <section class="flight-schedule" aria-labelledby="flight-schedule-heading">
+    <h2 id="flight-schedule-heading" class="flight-section-heading">
+      <span class="flight-section-symbol" aria-hidden="true">▤</span>
+      Schedule
+    </h2>
+
+    <div class="flight-boards">
+      <FlightBoard
+        title="Arrivals"
+        kind="arrival"
+        flights={arrivals}
+        totalFlights={arrivalsAll.length}
+        airlineCounts={arrivalAirlines}
+        isFresh={(id) => arrivalsFresh.freshIds.has(id)}
+        emptyText="No upcoming arrivals"
+      />
+      <FlightBoard
+        title="Departures"
+        kind="departure"
+        flights={departures}
+        totalFlights={departuresAll.length}
+        airlineCounts={departureAirlines}
+        isFresh={(id) => departuresFresh.freshIds.has(id)}
+        emptyText="No upcoming departures"
+      />
+    </div>
+  </section>
 </div>
 
 <style>
@@ -304,26 +333,65 @@
     line-height: 1;
   }
 
+  .flight-section-heading {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    padding: 0 0.1rem;
+  }
+
+  .flight-section-symbol {
+    display: inline-grid;
+    place-items: center;
+    width: 0.95rem;
+    height: 0.95rem;
+    border-radius: 0.25rem;
+    font-size: 0.5625rem;
+    font-weight: 700;
+    background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+    color: var(--color-accent);
+    flex-shrink: 0;
+  }
+
+  .flight-live,
+  .flight-schedule {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-height: 0;
+  }
+
+  .flight-schedule {
+    flex: 1;
+  }
+
   .flight-radar {
     display: grid;
     grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
     gap: 0.4rem;
     align-items: stretch;
-    min-height: clamp(12rem, 32vh, 18rem);
+    min-height: clamp(14rem, 36vh, 20rem);
   }
 
   .flight-radar-map {
     min-width: 0;
     min-height: 0;
     display: flex;
+    flex-direction: column;
   }
 
   .flight-radar-overhead {
     display: flex;
     flex-direction: column;
-    padding: 0.4rem;
     min-width: 0;
     min-height: 0;
+    overflow: hidden;
   }
 
   .flight-boards {
@@ -338,6 +406,10 @@
     .flight-radar {
       grid-template-columns: 1fr;
       min-height: 0;
+    }
+
+    .flight-radar-overhead {
+      min-height: clamp(14rem, 40vh, 20rem);
     }
 
     .flight-radar-map {
