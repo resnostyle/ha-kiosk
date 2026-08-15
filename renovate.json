@@ -1,3 +1,36 @@
 {
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json"
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:best-practices"],
+  "ignorePaths": ["k8s/**"],
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "description": "One PR for npm patch/minor",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "npm non-major"
+    },
+    {
+      "description": "Keep leaflet types with leaflet",
+      "matchPackageNames": ["leaflet", "@types/leaflet"],
+      "groupName": "leaflet"
+    },
+    {
+      "description": "One PR for Actions (including digest pins)",
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions"
+    },
+    {
+      "description": "Batch image rebuilds under the same tag",
+      "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["digest"],
+      "groupName": "docker digests"
+    },
+    {
+      "description": "Keep mise Node and Dockerfile node image on the same major",
+      "matchDatasources": ["node-version", "docker"],
+      "matchPackageNames": ["node"],
+      "groupName": "node"
+    }
+  ]
 }
