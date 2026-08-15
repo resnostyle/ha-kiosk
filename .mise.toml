@@ -2,7 +2,7 @@
 # First-time: mise trust && mise run setup
 
 [tools]
-node = "22"
+node = "24"
 
 [tasks.help]
 description = "Show available automation tasks"
